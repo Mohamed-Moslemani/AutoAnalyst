@@ -1,5 +1,4 @@
 # app/tasks.py
-
 from celery import Celery
 from .utils import (
     preprocess_dataframe,
@@ -19,13 +18,26 @@ import pickle
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Celery
+# Get REDIS_URL from environment variable
+REDIS_URL = os.getenv('REDIS_URL')
+if not REDIS_URL:
+    raise ValueError("REDIS_URL environment variable is not set.")
+
+# Initialize Celery with dynamic Redis URL
 celery = Celery(
     'tasks',
-    broker='redis://localhost:6379/0',  # Update if using a password or different host
-    backend='redis://localhost:6379/0'  # Update if using a password or different host
+    broker=REDIS_URL,
+    backend=REDIS_URL
 )
 
+# Other Celery configurations
+celery.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',
+    enable_utc=True,
+)
 @celery.task(bind=True)
 def preprocess_task(self, file_path):
     """
