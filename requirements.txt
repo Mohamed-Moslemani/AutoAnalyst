@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+celery[redis]
+pandas
+openai
+pillow
+python-multipart
+redis
