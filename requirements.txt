@@ -1,9 +1,12 @@
 fastapi
+celery
+pandas
+jinja2
+python-multipart
 uvicorn
+fastapi
 celery[redis]
 pandas
-openai
-pillow
+jinja2
 python-multipart
-redis
-gunicorn
+uvicorn
