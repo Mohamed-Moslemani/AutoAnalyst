@@ -9,4 +9,4 @@ celery[redis]
 pandas
 jinja2
 python-multipart
-uvicorn
+gunicorn
