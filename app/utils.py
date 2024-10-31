@@ -234,10 +234,15 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         else:
             return None, "No pairs found."
 
+    except ValueError as ve:
+        logger.error(f"ValueError in pair_messages: {ve}")
+        return None, str(ve)
+    except KeyError as ke:
+        logger.error(f"KeyError in pair_messages: {ke}")
+        return None, f"Missing column: {str(ke)}"
     except Exception as e:
-        logger.error(f"Error in pair_messages: {e}")
-        return None, f"Pairing failed. Error: {str(e)}"
-
+        logger.error(f"Unhandled exception in pair_messages: {e}")
+        return None, f"An unexpected error occurred: {str(e)}"
 
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
@@ -381,3 +386,35 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     except Exception as e:
         logger.error(f"Error in make_readable: {e}")
         return None, str(e)
+
+def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Optimizes DataFrame memory usage by downcasting numerical columns and converting object columns to categorical.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to optimize.
+
+    Returns:
+        pd.DataFrame: Optimized DataFrame.
+    """
+    try:
+        # Downcast numerical columns
+        for col in df.select_dtypes(include=['int', 'float']).columns:
+            original_dtype = df[col].dtype
+            df[col] = pd.to_numeric(df[col], downcast='unsigned')
+            logger.info(f"Downcasted column '{col}' from {original_dtype} to {df[col].dtype}")
+
+        # Convert object columns to categorical
+        for col in df.select_dtypes(include=['object']).columns:
+            num_unique_values = df[col].nunique()
+            num_total_values = len(df[col])
+            if num_unique_values / num_total_values < 0.5:
+                original_dtype = df[col].dtype
+                df[col] = df[col].astype('category')
+                logger.info(f"Converted column '{col}' from {original_dtype} to 'category'")
+        
+        logger.info("DataFrame optimized for memory usage.")
+        return df
+    except Exception as e:
+        logger.error(f"Error in optimize_dataframe: {e}")
+        return df  # Return the original DataFrame if optimization fails
