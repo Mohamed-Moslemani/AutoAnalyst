@@ -1,11 +1,12 @@
 # app/main.py
 
-from fastapi import FastAPI, Request, File, UploadFile, Form, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, File, UploadFile, Form
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
+import shutil
 import logging
 import boto3
 from botocore.exceptions import ClientError
@@ -26,18 +27,49 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# Mount static files and templates
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 # Initialize S3 client
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION')
+S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+
+if not all([AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, S3_BUCKET_NAME]):
+    raise ValueError("One or more AWS environment variables are not set.")
+
 s3_client = boto3.client(
     's3',
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-    region_name=os.getenv('AWS_DEFAULT_REGION')
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_DEFAULT_REGION
 )
 
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+def upload_file_to_s3(file: UploadFile, s3_key: str):
+    """
+    Uploads a file to S3.
+    """
+    try:
+        logger.info(f"Uploading file to S3: {s3_key}")
+        s3_client.upload_fileobj(file.file, S3_BUCKET_NAME, s3_key)
+        logger.info(f"Successfully uploaded {s3_key} to S3.")
+    except ClientError as e:
+        logger.error(f"Failed to upload {s3_key} to S3: {e}")
+        raise
+
+def download_file_from_s3(s3_key: str, local_path: str):
+    """
+    Downloads a file from S3 to the specified local path.
+    """
+    try:
+        logger.info(f"Downloading {s3_key} from S3 to {local_path}")
+        s3_client.download_file(S3_BUCKET_NAME, s3_key, local_path)
+        logger.info(f"Successfully downloaded {s3_key} to {local_path}")
+    except ClientError as e:
+        logger.error(f"Failed to download {s3_key} from S3: {e}")
+        raise
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -46,24 +78,16 @@ async def read_root(request: Request):
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        # Read file contents
-        file_contents = await file.read()
-
-        # Upload to S3
-        s3_client.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=file.filename,
-            Body=file_contents
-        )
-
-        logger.info(f"File {file.filename} uploaded to S3 bucket {S3_BUCKET_NAME}.")
-
-        # Start the preprocess task
-        task = preprocess_task.delay(file.filename)
+        # Define S3 key
+        s3_key = f"uploads/{file.filename}"
+        
+        # Upload the file to S3
+        upload_file_to_s3(file, s3_key)
+        
+        # Start the preprocess task with S3 key
+        task = preprocess_task.delay(s3_key)
+        
         return {"task_id": task.id}
-    except ClientError as e:
-        logger.error(f"Error uploading file to S3: {e}")
-        return {"error": f"Error uploading file to S3: {e}"}
     except Exception as e:
         logger.error(f"Error in /upload/: {e}")
         return {"error": str(e)}
@@ -96,11 +120,7 @@ async def sales_split_endpoint(file_key: str = Form(...)):
         return {"error": str(e)}
 
 @app.post("/search_messages/")
-async def search_messages_endpoint(
-    file_key: str = Form(...),
-    text_column: str = Form(...),
-    searched_text: str = Form(...)
-):
+async def search_messages_endpoint(file_key: str = Form(...), text_column: str = Form(...), searched_text: str = Form(...)):
     try:
         task = search_messages_task.delay(file_key, text_column, searched_text)
         return {"task_id": task.id}
@@ -109,10 +129,7 @@ async def search_messages_endpoint(
         return {"error": str(e)}
 
 @app.post("/filter_by_chat_id/")
-async def filter_by_chat_id_endpoint(
-    file_key: str = Form(...),
-    chat_id: str = Form(...)
-):
+async def filter_by_chat_id_endpoint(file_key: str = Form(...), chat_id: str = Form(...)):
     try:
         task = filter_by_chat_id_task.delay(file_key, chat_id)
         return {"task_id": task.id}
@@ -164,24 +181,17 @@ async def get_status(task_id: str):
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     try:
-        # Download the processed file from S3
-        response = s3_client.get_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=f"processed/{filename}"
-        )
-        file_contents = response['Body'].read()
-
-        # Return the file as a streaming response
-        return Response(
-            content=file_contents,
-            media_type='text/csv',
-            headers={
-                'Content-Disposition': f'attachment; filename="{filename}"'
-            }
-        )
-    except ClientError as e:
-        logger.error(f"Error downloading file from S3: {e}")
-        return {"error": f"Error downloading file from S3: {e}"}
+        # Define S3 key for processed file
+        s3_key = f"processed/{filename}"
+        
+        # Define local temporary path
+        local_path = f"/tmp/{filename}"
+        
+        # Download the file from S3 to local path
+        download_file_from_s3(s3_key, local_path)
+        
+        # Serve the file as a response
+        return FileResponse(path=local_path, filename=filename, media_type='application/octet-stream')
     except Exception as e:
         logger.error(f"Error in /download/{filename}: {e}")
-        return {"error": str(e)}
+        return {"error": "File not found or could not be downloaded."}
