@@ -8,15 +8,7 @@ import pandas as pd
 import pickle
 import io
 from celery import Celery
-from .utils import (
-    preprocess_dataframe,
-    pair_messages,
-    cs_split,
-    sales_split,
-    search_messages,
-    filter_by_chat_id,
-    make_readable
-)
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
