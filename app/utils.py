@@ -223,13 +223,30 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 'incoming_sender_ids', 'outgoing_sender_ids',
                 'outgoing_texts', 'incoming_texts'
             ]
+            # Verify all desired columns exist
+            missing_cols = set(desired_order) - set(paired_df.columns)
+            if missing_cols:
+                logger.warning(f"Missing columns in paired_df: {missing_cols}")
+                # Optionally, handle missing columns or fill them with default values
+                for col in missing_cols:
+                    paired_df[col] = None
             paired_df = paired_df[desired_order]
             return paired_df, "Messages paired successfully!"
         else:
             return None, "No pairs found."
 
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Splits CS chats based on agent IDs.
 
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (List[int]): List of CS agent IDs.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: A tuple containing the CS DataFrame (or None),
+        a message, and a success flag.
+    """
     try:
         if 'outgoing_sender_ids' not in df.columns:
             message = "Missing required column: 'outgoing_sender_ids'"
@@ -238,7 +255,7 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.Da
 
         cs_df = df[df['outgoing_sender_ids'].apply(
             lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
-            ).isin(cs_agents_ids)]
+        ).isin(cs_agents_ids)]
         if cs_df.empty:
             return None, "No CS chats found.", False
         else:
@@ -248,7 +265,17 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.Da
         return None, str(e), False
 
 def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Splits Sales chats based on agent IDs.
 
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (List[int]): List of CS agent IDs.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: A tuple containing the Sales DataFrame (or None),
+        a message, and a success flag.
+    """
     try:
         if 'outgoing_sender_ids' not in df.columns:
             message = "Missing required column: 'outgoing_sender_ids'"
@@ -256,8 +283,8 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd
             return None, message, False
 
         sales_df = df[~df['outgoing_sender_ids'].apply(
-                lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
-            ).isin(cs_agents_ids)]
+            lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
+        ).isin(cs_agents_ids)]
         if sales_df.empty:
             return None, "No Sales chats found.", False
         else:
@@ -267,6 +294,18 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd
         return None, str(e), False
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
+    """
+    Searches for messages containing the specified text.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        text_column (str): The column to search within.
+        searched_text (str): The text to search for.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str]: A tuple containing the search result DataFrame (or None)
+        and a message indicating the result.
+    """
     try:
         if text_column not in df.columns:
             message = f"Column '{text_column}' not found in DataFrame."
@@ -283,6 +322,17 @@ def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> T
         return None, str(e)
 
 def filter_by_chat_id(df: pd.DataFrame, chat_id: int) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Filters the DataFrame by the specified Chat ID.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        chat_id (int): The Chat ID to filter by.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: A tuple containing the filtered DataFrame (or None),
+        a message, and a success flag.
+    """
     try:
         if 'Chat ID' not in df.columns:
             message = "Missing required column: 'Chat ID'"
@@ -299,6 +349,16 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id: int) -> Tuple[Optional[pd.DataF
         return None, str(e), False
 
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
+    """
+    Converts the DataFrame into a GPT-readable text format.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        Tuple[Optional[str], str]: A tuple containing the readable text (or None)
+        and a message indicating the result.
+    """
     try:
         if 'incoming_texts' not in df.columns or 'outgoing_texts' not in df.columns:
             message = "Required columns 'incoming_texts' or 'outgoing_texts' are missing."
@@ -311,7 +371,7 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
             incoming = "Incoming Messages:\n" + '\n'.join([f"- {text}" for text in row['incoming_texts']]) + "\n"
             outgoing = "Outgoing Messages:\n" + '\n'.join([f"- {text}" for text in row['outgoing_texts']]) + "\n"
             readable_text.append(chat_info + incoming + outgoing)
-            
+        
         readable_text_str = '\n'.join(readable_text)
         return readable_text_str, "Data made GPT-readable successfully!"
     except Exception as e:
