@@ -300,9 +300,12 @@
                     checkStatus(data.task_id, "preprocess");
                 } else {
                     statusDiv.innerHTML = `Error: ${data.error}`;
+                    enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML = `Error: ${error}`;
+                console.error(`Upload Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -327,14 +330,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "pair_messages");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "pair_messages");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Pair Messages Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Pair Messages Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -359,14 +372,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "cs_split");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "cs_split");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`CS Split Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`CS Split Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -391,14 +414,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "sales_split");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "sales_split");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Sales Split Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Sales Split Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -428,14 +461,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "search_messages");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "search_messages");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Search Messages Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Search Messages Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -463,14 +506,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "filter_by_chat_id");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "filter_by_chat_id");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Filter by Chat ID Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Filter by Chat ID Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -495,21 +548,31 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "make_readable");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "make_readable");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Make Readable Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Make Readable Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
         async function saveToCSV() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
-                alert("Please perform an operation first.");
+                alert("Please upload and preprocess a file first.");
                 return;
             }
 
@@ -527,14 +590,24 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
-                    statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "save_to_csv");
+                if (response.ok) {
+                    if (data.task_id) {
+                        statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
+                        checkStatus(data.task_id, "save_to_csv");
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
+                        enableActionButtons();
+                    }
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.error}`;
+                    // Handle errors returned by the backend
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
+                    console.error(`Save to CSV Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error}`;
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Save to CSV Fetch Error: ${error}`);
+                enableActionButtons();
             }
         }
 
@@ -554,32 +627,31 @@
                         if (operation === "preprocess" && data.result.processed_file_s3_key) {
                             const filename = data.result.processed_file_s3_key.split('\\').pop().split('/').pop();
                             document.getElementById('currentFilePath').value = data.result.processed_file_s3_key;
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Processed File</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Processed File (CSV)</a>`;
                             enableActionButtons(); // Enable buttons after preprocessing
                         }
 
                         if (operation === "pair_messages" && data.result.paired_file_s3_key) {
                             const filename = data.result.paired_file_s3_key.split('\\').pop().split('/').pop();
-                            // Optionally set a new hidden input or handle as needed
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Paired Messages</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Paired Messages (CSV)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "cs_split" && data.result.cs_split_file_s3_key) {
                             const filename = data.result.cs_split_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CS Split File</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CS Split File (CSV)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "sales_split" && data.result.sales_split_file_s3_key) {
                             const filename = data.result.sales_split_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Sales Split File</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Sales Split File (CSV)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "make_readable" && data.result.readable_file_s3_key) {
                             const filename = data.result.readable_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Readable File</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Readable File (CSV)</a>`;
                             enableActionButtons();
                         }
 
