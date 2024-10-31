@@ -10,3 +10,4 @@ pandas
 jinja2
 python-multipart
 gunicorn
+boto3
