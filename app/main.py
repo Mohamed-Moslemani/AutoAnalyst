@@ -1,6 +1,6 @@
 # app/main.py
 
-from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
@@ -85,82 +85,75 @@ async def upload_file(file: UploadFile = File(...)):
         upload_file_to_s3(file, s3_key)
         
         # Start the preprocess task with S3 key
-        task = preprocess_task.delay(file_key=s3_key)
+        task = preprocess_task.delay(s3_key)
         
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /upload/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/pair_messages/")
 async def pair_messages_endpoint(file_key: str = Form(...)):
     try:
-        task = pair_messages_task.delay(file_key=file_key)
+        task = pair_messages_task.delay(file_key)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /pair_messages/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/cs_split/")
 async def cs_split_endpoint(file_key: str = Form(...)):
     try:
-        task = cs_split_task.delay(file_key=file_key)
+        task = cs_split_task.delay(file_key)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /cs_split/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/sales_split/")
 async def sales_split_endpoint(file_key: str = Form(...)):
     try:
-        task = sales_split_task.delay(file_key=file_key)
+        task = sales_split_task.delay(file_key)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /sales_split/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/search_messages/")
 async def search_messages_endpoint(file_key: str = Form(...), text_column: str = Form(...), searched_text: str = Form(...)):
     try:
-        task = search_messages_task.delay(file_key=file_key, text_column=text_column, searched_text=searched_text)
+        task = search_messages_task.delay(file_key, text_column, searched_text)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /search_messages/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/filter_by_chat_id/")
 async def filter_by_chat_id_endpoint(file_key: str = Form(...), chat_id: str = Form(...)):
     try:
-        # Convert chat_id to integer
-        chat_id_int = int(chat_id)
-    except ValueError:
-        logger.error("Invalid chat_id: must be an integer.")
-        raise HTTPException(status_code=400, detail="Invalid chat_id: must be an integer.")
-
-    try:
-        task = filter_by_chat_id_task.delay(file_key=file_key, chat_id=chat_id_int)
+        task = filter_by_chat_id_task.delay(file_key, chat_id)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /filter_by_chat_id/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/make_readable/")
 async def make_readable_endpoint(file_key: str = Form(...)):
     try:
-        task = make_readable_task.delay(file_key=file_key)
+        task = make_readable_task.delay(file_key)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /make_readable/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.post("/save_to_csv/")
 async def save_to_csv_endpoint(file_key: str = Form(...)):
     try:
-        task = save_to_csv_task.delay(file_key=file_key)
+        task = save_to_csv_task.delay(file_key)
         return {"task_id": task.id}
     except Exception as e:
         logger.error(f"Error in /save_to_csv/: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.get("/status/{task_id}")
 async def get_status(task_id: str):
@@ -168,20 +161,20 @@ async def get_status(task_id: str):
     if task.state == 'SUCCESS':
         response = {
             'state': task.state,
-            'status': task.info.get('status', ''),
+            'status': str(task.info.get('status', '')),
             'message': task.info.get('message', ''),
             'result': task.info
         }
     elif task.state == 'FAILURE':
         response = {
             'state': task.state,
-            'status': "Failed",
-            'message': str(task.info)
+            'status': str(task.info),
+            'message': task.info.get('message', str(task.info))
         }
     else:
         response = {
             'state': task.state,
-            'status': str(task.info)  # This can include current task status
+            'status': str(task.info)
         }
     return JSONResponse(response)
 
@@ -199,17 +192,6 @@ async def download_file(filename: str):
         
         # Serve the file as a response
         return FileResponse(path=local_path, filename=filename, media_type='application/octet-stream')
-    except ClientError as e:
-        logger.error(f"Error downloading {filename} from S3: {e}")
-        raise HTTPException(status_code=404, detail="File not found.")
     except Exception as e:
         logger.error(f"Error in /download/{filename}: {e}")
-        raise HTTPException(status_code=500, detail="Could not download the file.")
-    finally:
-        # Clean up the local file after serving
-        if os.path.exists(local_path):
-            try:
-                os.remove(local_path)
-                logger.info(f"Removed local file {local_path}")
-            except Exception as e:
-                logger.warning(f"Could not remove local file {local_path}: {e}")
+        return {"error": "File not found or could not be downloaded."}
