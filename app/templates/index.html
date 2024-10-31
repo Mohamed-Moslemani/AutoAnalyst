@@ -123,6 +123,11 @@
         .task-buttons button:hover {
             background-color: #d63447;
         }
+        /* Disable button styles */
+        .task-buttons button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
 
         /* Forms */
         .form-group {
@@ -206,26 +211,26 @@
 
                 <!-- Task Buttons -->
                 <div class="task-buttons">
-                    <button type="button" onclick="pairMessages()">Pair Messages</button>
-                    <button type="button" onclick="csSplit()">CS Split</button>
-                    <button type="button" onclick="salesSplit()">Sales Split</button>
-                    <button type="button" onclick="makeReadable()">Make Data GPT Readable</button>
-                    <button type="button" onclick="saveToCSV()">Save to CSV</button>
+                    <button type="button" onclick="pairMessages()" id="pairMessagesBtn" disabled>Pair Messages</button>
+                    <button type="button" onclick="csSplit()" id="csSplitBtn" disabled>CS Split</button>
+                    <button type="button" onclick="salesSplit()" id="salesSplitBtn" disabled>Sales Split</button>
+                    <button type="button" onclick="makeReadable()" id="makeReadableBtn" disabled>Make Data GPT Readable</button>
+                    <button type="button" onclick="saveToCSV()" id="saveToCSVBtn" disabled>Save to CSV</button>
                 </div>
 
                 <!-- Search Messages -->
                 <div class="form-group">
                     <label for="searchTextColumn">Search Messages</label>
-                    <input type="text" id="searchTextColumn" name="text_column" placeholder="Text Column">
-                    <input type="text" id="searchText" name="searched_text" placeholder="Search Text">
-                    <button type="button" onclick="searchMessages()">Search Messages</button>
+                    <input type="text" id="searchTextColumn" name="text_column" placeholder="Text Column" disabled>
+                    <input type="text" id="searchText" name="searched_text" placeholder="Search Text" disabled>
+                    <button type="button" onclick="searchMessages()" id="searchMessagesBtn" disabled>Search Messages</button>
                 </div>
 
                 <!-- Filter by Chat ID -->
                 <div class="form-group">
                     <label for="filterChatId">Filter by Chat ID</label>
-                    <input type="number" id="filterChatId" name="chat_id" placeholder="Chat ID">
-                    <button type="button" onclick="filterByChatId()">Filter</button>
+                    <input type="number" id="filterChatId" name="chat_id" placeholder="Chat ID" disabled>
+                    <button type="button" onclick="filterByChatId()" id="filterByChatIdBtn" disabled>Filter</button>
                 </div>
             </form>
         </div>
@@ -235,12 +240,44 @@
     <div class="footer">
         &copy; 2024 Sales-CS Chats Analyzer. 800Storage Data Team - All rights reserved.
     </div>
+
     <!-- JavaScript -->
     <script>
+        // Helper function to enable action buttons
+        function enableActionButtons() {
+            document.getElementById('pairMessagesBtn').disabled = false;
+            document.getElementById('csSplitBtn').disabled = false;
+            document.getElementById('salesSplitBtn').disabled = false;
+            document.getElementById('makeReadableBtn').disabled = false;
+            document.getElementById('saveToCSVBtn').disabled = false;
+            document.getElementById('searchTextColumn').disabled = false;
+            document.getElementById('searchText').disabled = false;
+            document.getElementById('searchMessagesBtn').disabled = false;
+            document.getElementById('filterChatId').disabled = false;
+            document.getElementById('filterByChatIdBtn').disabled = false;
+        }
+
+        // Helper function to disable action buttons
+        function disableActionButtons() {
+            document.getElementById('pairMessagesBtn').disabled = true;
+            document.getElementById('csSplitBtn').disabled = true;
+            document.getElementById('salesSplitBtn').disabled = true;
+            document.getElementById('makeReadableBtn').disabled = true;
+            document.getElementById('saveToCSVBtn').disabled = true;
+            document.getElementById('searchTextColumn').disabled = true;
+            document.getElementById('searchText').disabled = true;
+            document.getElementById('searchMessagesBtn').disabled = true;
+            document.getElementById('filterChatId').disabled = true;
+            document.getElementById('filterByChatIdBtn').disabled = true;
+        }
+
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
+            statusDiv.innerHTML = ""; // Clear previous status
+            disableActionButtons(); // Disable buttons during upload
+
             if (fileInput.files.length === 0) {
                 alert("Please select a file.");
                 return;
@@ -282,6 +319,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Pairing messages...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/pair_messages/', {
@@ -313,6 +351,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Splitting CS chats...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/cs_split/', {
@@ -344,6 +383,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Splitting Sales chats...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/sales_split/', {
@@ -364,8 +404,8 @@
 
         async function searchMessages() {
             const filePath = document.getElementById('currentFilePath').value;
-            const textColumn = document.getElementById('searchTextColumn').value;
-            const searchedText = document.getElementById('searchText').value;
+            const textColumn = document.getElementById('searchTextColumn').value.trim();
+            const searchedText = document.getElementById('searchText').value.trim();
 
             if (!filePath || !textColumn || !searchedText) {
                 alert("Please upload a file, specify a text column, and enter the search text.");
@@ -380,6 +420,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Searching messages...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/search_messages/', {
@@ -400,7 +441,7 @@
 
         async function filterByChatId() {
             const filePath = document.getElementById('currentFilePath').value;
-            const chatId = document.getElementById('filterChatId').value;
+            const chatId = document.getElementById('filterChatId').value.trim();
 
             if (!filePath || !chatId) {
                 alert("Please upload a file and enter a Chat ID.");
@@ -414,6 +455,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Filtering by Chat ID...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/filter_by_chat_id/', {
@@ -445,6 +487,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Making data readable...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/make_readable/', {
@@ -476,6 +519,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Saving to CSV...";
+            disableActionButtons(); // Optionally disable buttons during processing
 
             try {
                 const response = await fetch('/save_to_csv/', {
@@ -500,28 +544,62 @@
                 try {
                     const response = await fetch(`/status/${task_id}`);
                     const data = await response.json();
+                    console.log(`Status Check for Task ID ${task_id}:`, data); // Debugging line
+
                     if (data.state === 'SUCCESS') {
                         clearInterval(interval);
                         statusDiv.innerHTML += `<br>${data.message}`;
-                        if (data.result.processed_file) {
-                            const filename = data.result.processed_file.split('\\').pop().split('/').pop();
-                            document.getElementById('currentFilePath').value = data.result.processed_file;
+
+                        // Handle different operations
+                        if (operation === "preprocess" && data.result.processed_file_s3_key) {
+                            const filename = data.result.processed_file_s3_key.split('\\').pop().split('/').pop();
+                            document.getElementById('currentFilePath').value = data.result.processed_file_s3_key;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Processed File</a>`;
+                            enableActionButtons(); // Enable buttons after preprocessing
                         }
-                        if (data.result.csv_file) {
-                            const filename = data.result.csv_file.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CSV File</a>`;
+
+                        if (operation === "pair_messages" && data.result.paired_file_s3_key) {
+                            const filename = data.result.paired_file_s3_key.split('\\').pop().split('/').pop();
+                            // Optionally set a new hidden input or handle as needed
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Paired Messages</a>`;
+                            enableActionButtons();
                         }
-                        if (data.result.readable_file) {
-                            const filename = data.result.readable_file.split('\\').pop().split('/').pop();
+
+                        if (operation === "cs_split" && data.result.cs_split_file_s3_key) {
+                            const filename = data.result.cs_split_file_s3_key.split('\\').pop().split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CS Split File</a>`;
+                            enableActionButtons();
+                        }
+
+                        if (operation === "sales_split" && data.result.sales_split_file_s3_key) {
+                            const filename = data.result.sales_split_file_s3_key.split('\\').pop().split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Sales Split File</a>`;
+                            enableActionButtons();
+                        }
+
+                        if (operation === "make_readable" && data.result.readable_file_s3_key) {
+                            const filename = data.result.readable_file_s3_key.split('\\').pop().split('/').pop();
                             statusDiv.innerHTML += ` <a href="/download/${filename}">Download Readable File</a>`;
+                            enableActionButtons();
                         }
+
+                        if (operation === "save_to_csv" && data.result.csv_file_s3_key) {
+                            const filename = data.result.csv_file_s3_key.split('\\').pop().split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CSV File</a>`;
+                            enableActionButtons();
+                        }
+
                     } else if (data.state === 'FAILURE') {
                         clearInterval(interval);
                         statusDiv.innerHTML += `<br>Failed: ${data.message || data.status}`;
+                        enableActionButtons(); // Re-enable buttons to allow retry
+                    } else {
+                        statusDiv.innerHTML += `<br>${data.status}`;
                     }
                 } catch (error) {
                     clearInterval(interval);
                     statusDiv.innerHTML += `<br>Error checking status: ${error}`;
+                    console.error(`Error checking status for Task ID ${task_id}:`, error); // Debugging line
                 }
             }, 2000); // Check every 2 seconds
         }
