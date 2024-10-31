@@ -5,8 +5,8 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 import pandas as pd
-import pickle
 from celery import Celery
+from typing import Tuple, Optional
 from app.utils import (
     preprocess_dataframe,
     pair_messages,
@@ -15,9 +15,10 @@ from app.utils import (
     search_messages,
     filter_by_chat_id,
     make_readable,
-    optimize_dataframe  # Ensure this function is imported
+    optimize_dataframe
 )
 import gc
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,10 +32,13 @@ AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION')
 S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 # Validate environment variables
+missing_vars = []
 if not REDIS_URL:
-    raise ValueError("REDIS_URL environment variable is not set.")
+    missing_vars.append("REDIS_URL")
 if not all([AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, S3_BUCKET_NAME]):
-    raise ValueError("One or more AWS environment variables are not set.")
+    missing_vars.append("One or more AWS environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, S3_BUCKET_NAME")
+if missing_vars:
+    raise ValueError(f"Missing environment variables: {', '.join(missing_vars)}")
 
 # Initialize Celery
 celery = Celery(
@@ -96,27 +100,27 @@ def remove_local_file(local_path: str) -> None:
         logger.warning(f"Could not remove local file {local_path}: {e}")
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def preprocess_task(self, s3_input_key: str) -> dict:
+def preprocess_task(self, file_key: str) -> dict:
     """
     Task to preprocess the uploaded DataFrame.
     Downloads the file from S3, preprocesses it, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting preprocess_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting preprocess_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         processed_s3_key = f"processed/{base_name}_processed.parquet"  # Use Parquet for efficiency
         local_processed_path = f"/tmp/{base_name}_processed.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the file into a DataFrame
-        if s3_input_key.endswith('.csv'):
+        if file_key.endswith('.csv'):
             df = pd.read_csv(local_input_path)
-        elif s3_input_key.endswith(('.xlsx', '.xls')):
+        elif file_key.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(local_input_path)
         else:
             raise ValueError("Unsupported file format. Only CSV and Excel files are supported.")
@@ -154,22 +158,22 @@ def preprocess_task(self, s3_input_key: str) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def pair_messages_task(self, s3_input_key: str) -> dict:
+def pair_messages_task(self, file_key: str) -> dict:
     """
     Task to pair messages in the DataFrame.
     Downloads the file from S3, pairs messages, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting pair_messages_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting pair_messages_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         paired_s3_key = f"processed/{base_name}_paired.parquet"
         local_paired_path = f"/tmp/{base_name}_paired.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -207,22 +211,22 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def cs_split_task(self, s3_input_key: str) -> dict:
+def cs_split_task(self, file_key: str) -> dict:
     """
     Task to split CS chats in the DataFrame.
     Downloads the file from S3, splits CS chats, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting cs_split_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting cs_split_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         cs_split_s3_key = f"processed/{base_name}_cs_split.parquet"
         local_cs_split_path = f"/tmp/{base_name}_cs_split.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -263,22 +267,22 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def sales_split_task(self, s3_input_key: str) -> dict:
+def sales_split_task(self, file_key: str) -> dict:
     """
     Task to split Sales chats in the DataFrame.
     Downloads the file from S3, splits Sales chats, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting sales_split_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting sales_split_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         sales_split_s3_key = f"processed/{base_name}_sales_split.parquet"
         local_sales_split_path = f"/tmp/{base_name}_sales_split.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -319,22 +323,22 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def search_messages_task(self, s3_input_key: str, text_column: str, searched_text: str) -> dict:
+def search_messages_task(self, file_key: str, text_column: str, searched_text: str) -> dict:
     """
     Task to search messages in the DataFrame.
     Downloads the file from S3, searches messages, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting search_messages_task with S3 key: {s3_input_key}, text_column: {text_column}, searched_text: {searched_text}")
+        logger.info(f"Starting search_messages_task with S3 key: {file_key}, text_column: {text_column}, searched_text: {searched_text}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         search_messages_s3_key = f"processed/{base_name}_search_results.parquet"
         local_search_messages_path = f"/tmp/{base_name}_search_results.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -372,22 +376,22 @@ def search_messages_task(self, s3_input_key: str, text_column: str, searched_tex
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def filter_by_chat_id_task(self, s3_input_key: str, chat_id: int) -> dict:
+def filter_by_chat_id_task(self, file_key: str, chat_id: int) -> dict:
     """
     Task to filter DataFrame by Chat ID.
     Downloads the file from S3, filters by Chat ID, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting filter_by_chat_id_task with S3 key: {s3_input_key}, chat_id: {chat_id}")
+        logger.info(f"Starting filter_by_chat_id_task with S3 key: {file_key}, chat_id: {chat_id}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         filter_s3_key = f"processed/{base_name}_filtered_chat_{chat_id}.parquet"
         local_filter_path = f"/tmp/{base_name}_filtered_chat_{chat_id}.parquet"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -425,22 +429,22 @@ def filter_by_chat_id_task(self, s3_input_key: str, chat_id: int) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def make_readable_task(self, s3_input_key: str) -> dict:
+def make_readable_task(self, file_key: str) -> dict:
     """
     Task to make DataFrame readable.
     Downloads the file from S3, makes it readable, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting make_readable_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting make_readable_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         readable_s3_key = f"processed/{base_name}_readable.txt"
         local_readable_path = f"/tmp/{base_name}_readable.txt"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)
@@ -476,22 +480,22 @@ def make_readable_task(self, s3_input_key: str) -> dict:
         return {'status': 'failure', 'message': str(e)}
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
-def save_to_csv_task(self, s3_input_key: str) -> dict:
+def save_to_csv_task(self, file_key: str) -> dict:
     """
     Task to save the current DataFrame to CSV.
     Downloads the file from S3, saves it as CSV, and uploads the result back to S3.
     """
     try:
-        logger.info(f"Starting save_to_csv_task with S3 key: {s3_input_key}")
+        logger.info(f"Starting save_to_csv_task with S3 key: {file_key}")
 
         # Define local paths
-        local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(file_key)}"
+        base_name = os.path.splitext(os.path.basename(file_key))[0]
         csv_s3_key = f"processed/{base_name}.csv"
         local_csv_path = f"/tmp/{base_name}.csv"
 
         # Download the file from S3
-        download_file_from_s3(s3_input_key, local_input_path)
+        download_file_from_s3(file_key, local_input_path)
 
         # Read the DataFrame from the Parquet file
         df = pd.read_parquet(local_input_path)

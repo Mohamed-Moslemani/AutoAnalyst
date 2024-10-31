@@ -243,7 +243,7 @@
 
     <!-- JavaScript -->
     <script>
-        // Helper function to enable action buttons
+        // Enable Action Buttons
         function enableActionButtons() {
             document.getElementById('pairMessagesBtn').disabled = false;
             document.getElementById('csSplitBtn').disabled = false;
@@ -257,7 +257,7 @@
             document.getElementById('filterByChatIdBtn').disabled = false;
         }
 
-        // Helper function to disable action buttons
+        // Disable Action Buttons
         function disableActionButtons() {
             document.getElementById('pairMessagesBtn').disabled = true;
             document.getElementById('csSplitBtn').disabled = true;
@@ -271,12 +271,13 @@
             document.getElementById('filterByChatIdBtn').disabled = true;
         }
 
+        // Upload and Preprocess File
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
-            statusDiv.innerHTML = ""; // Clear previous status
-            disableActionButtons(); // Disable buttons during upload
+            statusDiv.innerHTML = "";
+            disableActionButtons();
 
             if (fileInput.files.length === 0) {
                 alert("Please select a file.");
@@ -286,6 +287,7 @@
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append("file", file);
+            formData.append("filename", file.name);
 
             statusDiv.innerHTML = "Uploading and preprocessing file...";
 
@@ -295,20 +297,22 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (data.task_id) {
+                if (response.ok && data.task_id) {
                     statusDiv.innerHTML = `Task ID: ${data.task_id}<br>Preprocessing...`;
                     checkStatus(data.task_id, "preprocess");
                 } else {
-                    statusDiv.innerHTML = `Error: ${data.error}`;
+                    statusDiv.innerHTML = `Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Upload Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
-                statusDiv.innerHTML = `Error: ${error}`;
-                console.error(`Upload Error: ${error}`);
+                statusDiv.innerHTML = `Error: ${error.message || error}`;
+                console.error(`Upload Fetch Error: ${error}`);
                 enableActionButtons();
             }
         }
 
+        // Pair Messages
         async function pairMessages() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -322,7 +326,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Pairing messages...";
-            disableActionButtons(); // Optionally disable buttons during processing
+            disableActionButtons();
 
             try {
                 const response = await fetch('/pair_messages/', {
@@ -330,18 +334,12 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "pair_messages");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "pair_messages");
                 } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Pair Messages Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Pair Messages Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
@@ -351,6 +349,7 @@
             }
         }
 
+        // CS Split
         async function csSplit() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -364,7 +363,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Splitting CS chats...";
-            disableActionButtons(); // Optionally disable buttons during processing
+            disableActionButtons();
 
             try {
                 const response = await fetch('/cs_split/', {
@@ -372,18 +371,12 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "cs_split");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "cs_split");
                 } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`CS Split Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`CS Split Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
@@ -393,6 +386,7 @@
             }
         }
 
+        // Sales Split
         async function salesSplit() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -406,7 +400,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Splitting Sales chats...";
-            disableActionButtons(); // Optionally disable buttons during processing
+            disableActionButtons();
 
             try {
                 const response = await fetch('/sales_split/', {
@@ -414,18 +408,12 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "sales_split");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "sales_split");
                 } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Sales Split Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Sales Split Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
@@ -435,6 +423,81 @@
             }
         }
 
+        // Make Readable
+        async function makeReadable() {
+            const filePath = document.getElementById('currentFilePath').value;
+            if (!filePath) {
+                alert("Please upload and preprocess a file first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file_path", filePath);
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML += "<br>Making data readable...";
+            disableActionButtons();
+
+            try {
+                const response = await fetch('/make_readable/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "make_readable");
+                } else {
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Make Readable Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    enableActionButtons();
+                }
+            } catch (error) {
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Make Readable Fetch Error: ${error}`);
+                enableActionButtons();
+            }
+        }
+
+        // Save to CSV
+        async function saveToCSV() {
+            const filePath = document.getElementById('currentFilePath').value;
+            if (!filePath) {
+                alert("Please upload and preprocess a file first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file_path", filePath);
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML += "<br>Saving to CSV...";
+            disableActionButtons();
+
+            try {
+                const response = await fetch('/save_to_csv/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "save_to_csv");
+                } else {
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Save to CSV Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    enableActionButtons();
+                }
+            } catch (error) {
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Save to CSV Fetch Error: ${error}`);
+                enableActionButtons();
+            }
+        }
+
+        // Search Messages
         async function searchMessages() {
             const filePath = document.getElementById('currentFilePath').value;
             const textColumn = document.getElementById('searchTextColumn').value.trim();
@@ -453,7 +516,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Searching messages...";
-            disableActionButtons(); // Optionally disable buttons during processing
+            disableActionButtons();
 
             try {
                 const response = await fetch('/search_messages/', {
@@ -461,18 +524,12 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "search_messages");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "search_messages");
                 } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Search Messages Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Search Messages Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
@@ -482,6 +539,7 @@
             }
         }
 
+        // Filter by Chat ID
         async function filterByChatId() {
             const filePath = document.getElementById('currentFilePath').value;
             const chatId = document.getElementById('filterChatId').value.trim();
@@ -498,7 +556,7 @@
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
             statusDiv.innerHTML += "<br>Filtering by Chat ID...";
-            disableActionButtons(); // Optionally disable buttons during processing
+            disableActionButtons();
 
             try {
                 const response = await fetch('/filter_by_chat_id/', {
@@ -506,18 +564,12 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "filter_by_chat_id");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "filter_by_chat_id");
                 } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Filter by Chat ID Error: ${data.detail || data.message || 'Unknown error.'}`);
+                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
+                    console.error(`Filter by Chat ID Error: ${data.detail || data.message || JSON.stringify(data)}`);
                     enableActionButtons();
                 }
             } catch (error) {
@@ -527,108 +579,24 @@
             }
         }
 
-        async function makeReadable() {
-            const filePath = document.getElementById('currentFilePath').value;
-            if (!filePath) {
-                alert("Please upload and preprocess a file first.");
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append("file_path", filePath);
-
-            const statusDiv = document.getElementById('status');
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML += "<br>Making data readable...";
-            disableActionButtons(); // Optionally disable buttons during processing
-
-            try {
-                const response = await fetch('/make_readable/', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "make_readable");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
-                } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Make Readable Error: ${data.detail || data.message || 'Unknown error.'}`);
-                    enableActionButtons();
-                }
-            } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Make Readable Fetch Error: ${error}`);
-                enableActionButtons();
-            }
-        }
-
-        async function saveToCSV() {
-            const filePath = document.getElementById('currentFilePath').value;
-            if (!filePath) {
-                alert("Please upload and preprocess a file first.");
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append("file_path", filePath);
-
-            const statusDiv = document.getElementById('status');
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML += "<br>Saving to CSV...";
-            disableActionButtons(); // Optionally disable buttons during processing
-
-            try {
-                const response = await fetch('/save_to_csv/', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    if (data.task_id) {
-                        statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
-                        checkStatus(data.task_id, "save_to_csv");
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: Missing task ID in response.`;
-                        enableActionButtons();
-                    }
-                } else {
-                    // Handle errors returned by the backend
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || 'Unknown error.'}`;
-                    console.error(`Save to CSV Error: ${data.detail || data.message || 'Unknown error.'}`);
-                    enableActionButtons();
-                }
-            } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Save to CSV Fetch Error: ${error}`);
-                enableActionButtons();
-            }
-        }
-
+        // Check Task Status
         async function checkStatus(task_id, operation) {
             const statusDiv = document.getElementById('status');
             const interval = setInterval(async () => {
                 try {
                     const response = await fetch(`/status/${task_id}`);
                     const data = await response.json();
-                    console.log(`Status Check for Task ID ${task_id}:`, data); // Debugging line
+                    console.log(`Status Check for Task ID ${task_id}:`, data);
 
                     if (data.state === 'SUCCESS') {
                         clearInterval(interval);
                         statusDiv.innerHTML += `<br>${data.message}`;
 
-                        // Handle different operations
                         if (operation === "preprocess" && data.result.processed_file_s3_key) {
                             const filename = data.result.processed_file_s3_key.split('\\').pop().split('/').pop();
                             document.getElementById('currentFilePath').value = data.result.processed_file_s3_key;
                             statusDiv.innerHTML += ` <a href="/download/${filename}">Download Processed File (CSV)</a>`;
-                            enableActionButtons(); // Enable buttons after preprocessing
+                            enableActionButtons();
                         }
 
                         if (operation === "pair_messages" && data.result.paired_file_s3_key) {
@@ -663,17 +631,17 @@
 
                     } else if (data.state === 'FAILURE') {
                         clearInterval(interval);
-                        statusDiv.innerHTML += `<br>Failed: ${data.message || data.status}`;
-                        enableActionButtons(); // Re-enable buttons to allow retry
+                        statusDiv.innerHTML += `<br>Failed: ${data.message || JSON.stringify(data) || data.status}`;
+                        enableActionButtons();
                     } else {
                         statusDiv.innerHTML += `<br>${data.status}`;
                     }
                 } catch (error) {
                     clearInterval(interval);
                     statusDiv.innerHTML += `<br>Error checking status: ${error}`;
-                    console.error(`Error checking status for Task ID ${task_id}:`, error); // Debugging line
+                    console.error(`Error checking status for Task ID ${task_id}:`, error);
                 }
-            }, 2000); // Check every 2 seconds
+            }, 2000);
         }
     </script>
 </body>
