@@ -61,21 +61,22 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
     try:
         if df is None or df.empty:
             raise ValueError("No DataFrame loaded. Please upload a file.")
-        
-        # Convert 'Date & Time' to datetime and sort
+
+        logger.info("Converting 'Date & Time' to datetime format.")
         df['Date & Time'] = pd.to_datetime(df['Date & Time'])
+        logger.info("Sorting DataFrame by 'Contact ID' and 'Date & Time'.")
         df = df.sort_values(by=['Contact ID', 'Date & Time']).reset_index(drop=True)
-        
-        # Remove specific Contact ID
+
+        logger.info("Removing entries with 'Contact ID' == 21794581.")
         df = df[df['Contact ID'] != 21794581]
-        
-        # Extract text from 'Content'
+
+        logger.info("Extracting text from 'Content' column.")
         df['text'] = df['Content'].apply(extract_text)
-        
-        # Create 'Chat ID' by cumulatively counting changes in 'Contact ID'
+
+        logger.info("Creating 'Chat ID' by counting changes in 'Contact ID'.")
         df['Chat ID'] = (df['Contact ID'] != df['Contact ID'].shift()).cumsum()
-        
-        # Reorder columns: Move 'Chat ID' to front and 'text' after 'Content'
+
+        logger.info("Reordering columns: Moving 'Chat ID' to front and 'text' after 'Content'.")
         cols = df.columns.tolist()
         if 'Chat ID' in cols:
             cols.remove('Chat ID')
@@ -86,13 +87,14 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
             cols.insert(content_idx, 'text')
         df = df[cols]
 
-        # Fill missing values
+        logger.info("Filling missing values in 'text', 'Type', and 'Sub Type' columns.")
         df['text'] = df['text'].fillna('template')
         df['Type'] = df['Type'].fillna('normal_text')
         df['Sub Type'] = df['Sub Type'].fillna('normal_text')
 
         # Drop the first row if it exists (optional based on your data)
         if 0 in df.index:
+            logger.info("Dropping the first row of the DataFrame.")
             df = df.drop(index=0).reset_index(drop=True)
 
         # Log the columns after preprocessing
@@ -100,9 +102,17 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
 
         return df, "DataFrame preprocessed successfully!"
 
+    except ValueError as ve:
+        logger.error(f"ValueError in preprocess_dataframe: {ve}")
+        return None, str(ve)
+    except KeyError as ke:
+        logger.error(f"KeyError in preprocess_dataframe: Missing column {ke}")
+        return None, f"Missing column: {str(ke)}"
     except Exception as e:
-        logger.error(f"Error in preprocess_dataframe: {e}")
+        logger.error(f"Unhandled exception in preprocess_dataframe: {e}")
         return None, f"Preprocessing failed. Error: {str(e)}"
+    
+    
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     """
     Pairs incoming and outgoing messages in the DataFrame.
@@ -118,6 +128,8 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         if df is None or df.empty:
             raise ValueError("No DataFrame loaded. Please upload and preprocess the file.")
 
+        logger.info("Starting to pair messages.")
+        
         # Initialize variables
         paired_rows: List[Dict] = []
         current_contact_id: Optional[int] = None
@@ -230,20 +242,24 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 for col in missing_cols:
                     paired_df[col] = None
             paired_df = paired_df[desired_order]
+            logger.info("Messages paired successfully.")
             return paired_df, "Messages paired successfully!"
         else:
+            logger.info("No pairs found.")
             return None, "No pairs found."
 
     except ValueError as ve:
         logger.error(f"ValueError in pair_messages: {ve}")
         return None, str(ve)
     except KeyError as ke:
-        logger.error(f"KeyError in pair_messages: {ke}")
+        logger.error(f"KeyError in pair_messages: Missing column {ke}")
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         logger.error(f"Unhandled exception in pair_messages: {e}")
         return None, f"An unexpected error occurred: {str(e)}"
+    
 
+    
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits CS chats based on agent IDs.
@@ -390,10 +406,10 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
 def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Optimizes DataFrame memory usage by downcasting numerical columns and converting object columns to categorical.
-
+    
     Args:
         df (pd.DataFrame): The DataFrame to optimize.
-
+    
     Returns:
         pd.DataFrame: Optimized DataFrame.
     """
@@ -404,7 +420,7 @@ def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], downcast='unsigned')
             logger.info(f"Downcasted column '{col}' from {original_dtype} to {df[col].dtype}")
 
-        # Convert object columns to categorical
+        # Convert object columns to categorical and add necessary categories
         for col in df.select_dtypes(include=['object']).columns:
             num_unique_values = df[col].nunique()
             num_total_values = len(df[col])
@@ -412,6 +428,15 @@ def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 original_dtype = df[col].dtype
                 df[col] = df[col].astype('category')
                 logger.info(f"Converted column '{col}' from {original_dtype} to 'category'")
+                
+                # Add 'normal_text' and 'template' to specific columns
+                if col in ['text', 'Type', 'Sub Type']:
+                    new_categories = ['normal_text', 'template']
+                    existing_categories = df[col].cat.categories.tolist()
+                    categories_to_add = [cat for cat in new_categories if cat not in existing_categories]
+                    if categories_to_add:
+                        df[col] = df[col].cat.add_categories(categories_to_add)
+                        logger.info(f"Added categories {categories_to_add} to column '{col}'")
         
         logger.info("DataFrame optimized for memory usage.")
         return df
