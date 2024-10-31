@@ -14,8 +14,10 @@ from app.utils import (
     sales_split,
     search_messages,
     filter_by_chat_id,
-    make_readable
+    make_readable,
+    optimize_dataframe  # Ensure this function is imported
 )
+import gc
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +49,7 @@ celery.conf.update(
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
+    worker_concurrency=2,  # Limit concurrency to 2
 )
 
 # Initialize S3 client
@@ -57,7 +60,7 @@ s3_client = boto3.client(
     region_name=AWS_DEFAULT_REGION
 )
 
-def download_file_from_s3(s3_key, local_path):
+def download_file_from_s3(s3_key: str, local_path: str) -> None:
     """
     Downloads a file from S3 to the specified local path.
     """
@@ -69,7 +72,7 @@ def download_file_from_s3(s3_key, local_path):
         logger.error(f"Failed to download {s3_key} from S3: {e}")
         raise
 
-def upload_file_to_s3(local_path, s3_key):
+def upload_file_to_s3(local_path: str, s3_key: str) -> None:
     """
     Uploads a local file to S3 with the specified S3 key.
     """
@@ -81,7 +84,7 @@ def upload_file_to_s3(local_path, s3_key):
         logger.error(f"Failed to upload {local_path} to S3: {e}")
         raise
 
-def remove_local_file(local_path):
+def remove_local_file(local_path: str) -> None:
     """
     Removes a local file if it exists.
     """
@@ -92,8 +95,8 @@ def remove_local_file(local_path):
     except Exception as e:
         logger.warning(f"Could not remove local file {local_path}: {e}")
 
-@celery.task(bind=True)
-def preprocess_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def preprocess_task(self, s3_input_key: str) -> dict:
     """
     Task to preprocess the uploaded DataFrame.
     Downloads the file from S3, preprocesses it, and uploads the result back to S3.
@@ -104,8 +107,8 @@ def preprocess_task(self, s3_input_key):
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        processed_s3_key = f"processed/{base_name}_processed.pkl"
-        local_processed_path = f"/tmp/{base_name}_processed.pkl"
+        processed_s3_key = f"processed/{base_name}_processed.parquet"  # Use Parquet for efficiency
+        local_processed_path = f"/tmp/{base_name}_processed.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
@@ -118,14 +121,19 @@ def preprocess_task(self, s3_input_key):
         else:
             raise ValueError("Unsupported file format. Only CSV and Excel files are supported.")
 
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
+
         # Preprocess the DataFrame
         df, message = preprocess_dataframe(df)
         if df is None:
             raise ValueError("Preprocessing failed.")
 
-        # Save the preprocessed DataFrame to a pickle file
-        with open(local_processed_path, 'wb') as f:
-            pickle.dump(df, f)
+        # Further optimize after preprocessing
+        df = optimize_dataframe(df)
+
+        # Save the preprocessed DataFrame to a Parquet file
+        df.to_parquet(local_processed_path, index=False)
         logger.info(f"Preprocessed DataFrame saved to {local_processed_path}")
 
         # Upload the processed file back to S3
@@ -135,14 +143,18 @@ def preprocess_task(self, s3_input_key):
         remove_local_file(local_input_path)
         remove_local_file(local_processed_path)
 
+        # Free up memory
+        del df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'processed_file_s3_key': processed_s3_key}
 
     except Exception as e:
         logger.error(f"Error in preprocess_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def pair_messages_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def pair_messages_task(self, s3_input_key: str) -> dict:
     """
     Task to pair messages in the DataFrame.
     Downloads the file from S3, pairs messages, and uploads the result back to S3.
@@ -152,24 +164,29 @@ def pair_messages_task(self, s3_input_key):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        paired_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_paired.pkl"
-        local_paired_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_paired.pkl"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        paired_s3_key = f"processed/{base_name}_paired.parquet"
+        local_paired_path = f"/tmp/{base_name}_paired.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Pair messages
         paired_df, message = pair_messages(df)
         if paired_df is None:
             raise ValueError(message)
 
-        # Save the paired DataFrame back to a pickle file
-        with open(local_paired_path, 'wb') as f:
-            pickle.dump(paired_df, f)
+        # Further optimize after pairing
+        paired_df = optimize_dataframe(paired_df)
+
+        # Save the paired DataFrame to a Parquet file
+        paired_df.to_parquet(local_paired_path, index=False)
         logger.info(f"Paired DataFrame saved to {local_paired_path}")
 
         # Upload the paired file back to S3
@@ -179,14 +196,18 @@ def pair_messages_task(self, s3_input_key):
         remove_local_file(local_input_path)
         remove_local_file(local_paired_path)
 
+        # Free up memory
+        del df, paired_df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'paired_file_s3_key': paired_s3_key}
 
     except Exception as e:
         logger.error(f"Error in pair_messages_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def cs_split_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def cs_split_task(self, s3_input_key: str) -> dict:
     """
     Task to split CS chats in the DataFrame.
     Downloads the file from S3, splits CS chats, and uploads the result back to S3.
@@ -196,15 +217,18 @@ def cs_split_task(self, s3_input_key):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        cs_split_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_cs_split.pkl"
-        local_cs_split_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_cs_split.pkl"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        cs_split_s3_key = f"processed/{base_name}_cs_split.parquet"
+        local_cs_split_path = f"/tmp/{base_name}_cs_split.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Define CS agent IDs
         cs_agents_ids = [124760, 396575, 354259, 352740, 178283]
@@ -214,9 +238,11 @@ def cs_split_task(self, s3_input_key):
         if not success:
             raise ValueError(message)
 
-        # Save the CS split DataFrame back to a pickle file
-        with open(local_cs_split_path, 'wb') as f:
-            pickle.dump(cs_df, f)
+        # Further optimize after splitting
+        cs_df = optimize_dataframe(cs_df)
+
+        # Save the CS split DataFrame to a Parquet file
+        cs_df.to_parquet(local_cs_split_path, index=False)
         logger.info(f"CS split DataFrame saved to {local_cs_split_path}")
 
         # Upload the CS split file back to S3
@@ -226,14 +252,18 @@ def cs_split_task(self, s3_input_key):
         remove_local_file(local_input_path)
         remove_local_file(local_cs_split_path)
 
+        # Free up memory
+        del df, cs_df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'cs_split_file_s3_key': cs_split_s3_key}
 
     except Exception as e:
         logger.error(f"Error in cs_split_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def sales_split_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def sales_split_task(self, s3_input_key: str) -> dict:
     """
     Task to split Sales chats in the DataFrame.
     Downloads the file from S3, splits Sales chats, and uploads the result back to S3.
@@ -243,15 +273,18 @@ def sales_split_task(self, s3_input_key):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        sales_split_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_sales_split.pkl"
-        local_sales_split_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_sales_split.pkl"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        sales_split_s3_key = f"processed/{base_name}_sales_split.parquet"
+        local_sales_split_path = f"/tmp/{base_name}_sales_split.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Define CS agent IDs
         cs_agents_ids = [124760, 396575, 354259, 352740, 178283]
@@ -261,9 +294,11 @@ def sales_split_task(self, s3_input_key):
         if not success:
             raise ValueError(message)
 
-        # Save the Sales split DataFrame back to a pickle file
-        with open(local_sales_split_path, 'wb') as f:
-            pickle.dump(sales_df, f)
+        # Further optimize after splitting
+        sales_df = optimize_dataframe(sales_df)
+
+        # Save the Sales split DataFrame to a Parquet file
+        sales_df.to_parquet(local_sales_split_path, index=False)
         logger.info(f"Sales split DataFrame saved to {local_sales_split_path}")
 
         # Upload the Sales split file back to S3
@@ -273,14 +308,18 @@ def sales_split_task(self, s3_input_key):
         remove_local_file(local_input_path)
         remove_local_file(local_sales_split_path)
 
+        # Free up memory
+        del df, sales_df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'sales_split_file_s3_key': sales_split_s3_key}
 
     except Exception as e:
         logger.error(f"Error in sales_split_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def search_messages_task(self, s3_input_key, text_column, searched_text):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def search_messages_task(self, s3_input_key: str, text_column: str, searched_text: str) -> dict:
     """
     Task to search messages in the DataFrame.
     Downloads the file from S3, searches messages, and uploads the result back to S3.
@@ -290,24 +329,29 @@ def search_messages_task(self, s3_input_key, text_column, searched_text):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        search_messages_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_search_results.pkl"
-        local_search_messages_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_search_results.pkl"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        search_messages_s3_key = f"processed/{base_name}_search_results.parquet"
+        local_search_messages_path = f"/tmp/{base_name}_search_results.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Search messages
         search_df, message = search_messages(df, text_column, searched_text)
         if search_df is None:
             raise ValueError(message)
 
-        # Save the search result DataFrame back to a pickle file
-        with open(local_search_messages_path, 'wb') as f:
-            pickle.dump(search_df, f)
+        # Further optimize after searching
+        search_df = optimize_dataframe(search_df)
+
+        # Save the search result DataFrame to a Parquet file
+        search_df.to_parquet(local_search_messages_path, index=False)
         logger.info(f"Search messages DataFrame saved to {local_search_messages_path}")
 
         # Upload the search messages file back to S3
@@ -317,14 +361,18 @@ def search_messages_task(self, s3_input_key, text_column, searched_text):
         remove_local_file(local_input_path)
         remove_local_file(local_search_messages_path)
 
+        # Free up memory
+        del df, search_df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'search_messages_file_s3_key': search_messages_s3_key}
 
     except Exception as e:
         logger.error(f"Error in search_messages_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def filter_by_chat_id_task(self, s3_input_key, chat_id):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def filter_by_chat_id_task(self, s3_input_key: str, chat_id: int) -> dict:
     """
     Task to filter DataFrame by Chat ID.
     Downloads the file from S3, filters by Chat ID, and uploads the result back to S3.
@@ -334,24 +382,29 @@ def filter_by_chat_id_task(self, s3_input_key, chat_id):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        filter_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_filtered_chat_{chat_id}.pkl"
-        local_filter_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_filtered_chat_{chat_id}.pkl"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        filter_s3_key = f"processed/{base_name}_filtered_chat_{chat_id}.parquet"
+        local_filter_path = f"/tmp/{base_name}_filtered_chat_{chat_id}.parquet"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Filter by Chat ID
         filtered_df, message, success = filter_by_chat_id(df, chat_id)
         if not success:
             raise ValueError(message)
 
-        # Save the filtered DataFrame back to a pickle file
-        with open(local_filter_path, 'wb') as f:
-            pickle.dump(filtered_df, f)
+        # Further optimize after filtering
+        filtered_df = optimize_dataframe(filtered_df)
+
+        # Save the filtered DataFrame to a Parquet file
+        filtered_df.to_parquet(local_filter_path, index=False)
         logger.info(f"Filtered DataFrame saved to {local_filter_path}")
 
         # Upload the filtered file back to S3
@@ -361,14 +414,18 @@ def filter_by_chat_id_task(self, s3_input_key, chat_id):
         remove_local_file(local_input_path)
         remove_local_file(local_filter_path)
 
+        # Free up memory
+        del df, filtered_df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'filter_file_s3_key': filter_s3_key}
 
     except Exception as e:
         logger.error(f"Error in filter_by_chat_id_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def make_readable_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def make_readable_task(self, s3_input_key: str) -> dict:
     """
     Task to make DataFrame readable.
     Downloads the file from S3, makes it readable, and uploads the result back to S3.
@@ -378,15 +435,18 @@ def make_readable_task(self, s3_input_key):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        readable_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}_readable.txt"
-        local_readable_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}_readable.txt"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        readable_s3_key = f"processed/{base_name}_readable.txt"
+        local_readable_path = f"/tmp/{base_name}_readable.txt"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Make DataFrame readable
         readable_text, message = make_readable(df)
@@ -405,14 +465,18 @@ def make_readable_task(self, s3_input_key):
         remove_local_file(local_input_path)
         remove_local_file(local_readable_path)
 
+        # Free up memory
+        del df
+        gc.collect()
+
         return {'status': 'success', 'message': message, 'readable_file_s3_key': readable_s3_key}
 
     except Exception as e:
         logger.error(f"Error in make_readable_task: {e}")
         return {'status': 'failure', 'message': str(e)}
 
-@celery.task(bind=True)
-def save_to_csv_task(self, s3_input_key):
+@celery.task(bind=True, time_limit=600, soft_time_limit=550)
+def save_to_csv_task(self, s3_input_key: str) -> dict:
     """
     Task to save the current DataFrame to CSV.
     Downloads the file from S3, saves it as CSV, and uploads the result back to S3.
@@ -422,15 +486,18 @@ def save_to_csv_task(self, s3_input_key):
 
         # Define local paths
         local_input_path = f"/tmp/{os.path.basename(s3_input_key)}"
-        csv_s3_key = f"processed/{os.path.splitext(os.path.basename(s3_input_key))[0]}.csv"
-        local_csv_path = f"/tmp/{os.path.splitext(os.path.basename(s3_input_key))[0]}.csv"
+        base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
+        csv_s3_key = f"processed/{base_name}.csv"
+        local_csv_path = f"/tmp/{base_name}.csv"
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Load the DataFrame from the pickle file
-        with open(local_input_path, 'rb') as f:
-            df = pickle.load(f)
+        # Read the DataFrame from the Parquet file
+        df = pd.read_parquet(local_input_path)
+
+        # Optimize DataFrame
+        df = optimize_dataframe(df)
 
         # Save the DataFrame to CSV
         df.to_csv(local_csv_path, index=False)
@@ -442,6 +509,10 @@ def save_to_csv_task(self, s3_input_key):
         # Clean up local files
         remove_local_file(local_input_path)
         remove_local_file(local_csv_path)
+
+        # Free up memory
+        del df
+        gc.collect()
 
         return {'status': 'success', 'message': 'Data saved to CSV successfully!', 'csv_file_s3_key': csv_s3_key}
 
