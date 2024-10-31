@@ -103,7 +103,6 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
     except Exception as e:
         logger.error(f"Error in preprocess_dataframe: {e}")
         return None, f"Preprocessing failed. Error: {str(e)}"
-
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     """
     Pairs incoming and outgoing messages in the DataFrame.
@@ -234,6 +233,11 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
             return paired_df, "Messages paired successfully!"
         else:
             return None, "No pairs found."
+
+    except Exception as e:
+        logger.error(f"Error in pair_messages: {e}")
+        return None, f"Pairing failed. Error: {str(e)}"
+
 
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
