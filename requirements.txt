@@ -12,4 +12,3 @@ python-multipart
 gunicorn
 boto3
 pyarrow
-dotenv
