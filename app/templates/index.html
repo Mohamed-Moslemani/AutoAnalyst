@@ -590,56 +590,62 @@
 
                     if (data.state === 'SUCCESS') {
                         clearInterval(interval);
-                        statusDiv.innerHTML += `<br>${data.message}`;
+                        if (data.result && data.result.message) {
+                            statusDiv.innerHTML += `<br>${data.result.message}`;
+                        }
 
+                        // Handle specific operations
                         if (operation === "preprocess" && data.result.processed_file_s3_key) {
-                            const filename = data.result.processed_file_s3_key.split('\\').pop().split('/').pop();
+                            const filename = data.result.processed_file_s3_key.split('/').pop();
                             document.getElementById('currentFilePath').value = data.result.processed_file_s3_key;
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Processed File (CSV)</a>`;
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Processed File (Parquet)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "pair_messages" && data.result.paired_file_s3_key) {
-                            const filename = data.result.paired_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Paired Messages (CSV)</a>`;
+                            const filename = data.result.paired_file_s3_key.split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Paired Messages (Parquet)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "cs_split" && data.result.cs_split_file_s3_key) {
-                            const filename = data.result.cs_split_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CS Split File (CSV)</a>`;
+                            const filename = data.result.cs_split_file_s3_key.split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download CS Split File (Parquet)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "sales_split" && data.result.sales_split_file_s3_key) {
-                            const filename = data.result.sales_split_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Sales Split File (CSV)</a>`;
+                            const filename = data.result.sales_split_file_s3_key.split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Sales Split File (Parquet)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "make_readable" && data.result.readable_file_s3_key) {
-                            const filename = data.result.readable_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download Readable File (CSV)</a>`;
+                            const filename = data.result.readable_file_s3_key.split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Readable File (TXT)</a>`;
                             enableActionButtons();
                         }
 
                         if (operation === "save_to_csv" && data.result.csv_file_s3_key) {
-                            const filename = data.result.csv_file_s3_key.split('\\').pop().split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}">Download CSV File</a>`;
+                            const filename = data.result.csv_file_s3_key.split('/').pop();
+                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download CSV File</a>`;
                             enableActionButtons();
                         }
 
                     } else if (data.state === 'FAILURE') {
                         clearInterval(interval);
-                        statusDiv.innerHTML += `<br>Failed: ${data.message || JSON.stringify(data) || data.status}`;
+                        const errorMessage = (data.result && data.result.message) ? data.result.message : 'Unknown error.';
+                        statusDiv.innerHTML += `<br>Failed: ${errorMessage}`;
                         enableActionButtons();
                     } else {
-                        statusDiv.innerHTML += `<br>${data.status}`;
+                        // For other states like PENDING, STARTED
+                        statusDiv.innerHTML += `<br>${data.state}`;
                     }
                 } catch (error) {
                     clearInterval(interval);
                     statusDiv.innerHTML += `<br>Error checking status: ${error}`;
                     console.error(`Error checking status for Task ID ${task_id}:`, error);
+                    enableActionButtons();
                 }
             }, 2000);
         }

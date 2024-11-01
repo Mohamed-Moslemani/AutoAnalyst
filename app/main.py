@@ -10,6 +10,7 @@ import shutil
 import logging
 import boto3
 from botocore.exceptions import ClientError
+import tempfile  # Import tempfile for cross-platform temp directories
 from .tasks import (
     preprocess_task,
     pair_messages_task,
@@ -160,21 +161,18 @@ async def get_status(task_id: str):
     task = AsyncResult(task_id)
     if task.state == 'SUCCESS':
         response = {
-            'state': task.state,
-            'status': str(task.info.get('status', '')),
-            'message': task.info.get('message', ''),
-            'result': task.info
+            "state": task.state,
+            "result": task.result
         }
     elif task.state == 'FAILURE':
         response = {
-            'state': task.state,
-            'status': str(task.info),
-            'message': task.info.get('message', str(task.info))
+            "state": task.state,
+            "result": {"message": str(task.result)}
         }
     else:
         response = {
-            'state': task.state,
-            'status': str(task.info)
+            "state": task.state,
+            "result": {}
         }
     return JSONResponse(response)
 
@@ -184,14 +182,22 @@ async def download_file(filename: str):
         # Define S3 key for processed file
         s3_key = f"processed/{filename}"
         
-        # Define local temporary path
-        local_path = f"/tmp/{filename}"
+        # Define local temporary path using tempfile for cross-platform compatibility
+        temp_dir = tempfile.gettempdir()
+        local_path = os.path.join(temp_dir, filename)
         
         # Download the file from S3 to local path
         download_file_from_s3(s3_key, local_path)
         
         # Serve the file as a response
         return FileResponse(path=local_path, filename=filename, media_type='application/octet-stream')
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            logger.error(f"File not found: {s3_key}")
+            return JSONResponse({"error": "File not found."}, status_code=404)
+        else:
+            logger.error(f"Error downloading file {s3_key}: {e}")
+            return JSONResponse({"error": "Could not download file."}, status_code=500)
     except Exception as e:
         logger.error(f"Error in /download/{filename}: {e}")
-        return {"error": "File not found or could not be downloaded."}
+        return JSONResponse({"error": "File not found or could not be downloaded."}, status_code=404)

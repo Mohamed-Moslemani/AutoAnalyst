@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 import pandas as pd
 from celery import Celery
 from typing import Tuple, Optional
+from dotenv import load_dotenv
 from app.utils import (
     preprocess_dataframe,
     pair_messages,
@@ -23,7 +24,7 @@ import uuid
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+load_dotenv()   
 # Retrieve environment variables
 REDIS_URL = os.getenv('REDIS_URL')
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
@@ -516,6 +517,7 @@ def save_to_csv_task(self, s3_input_key: str) -> dict:
         gc.collect()
 
         return {'status': 'success', 'message': 'Data saved to CSV successfully!', 'csv_file_s3_key': csv_s3_key}
+
 
     except Exception as e:
         logger.error(f"Error in save_to_csv_task: {e}")

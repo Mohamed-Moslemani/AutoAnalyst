@@ -1,3 +1,4 @@
 /processed/
 /uploads/
 /app/__pycache__/
+.env
