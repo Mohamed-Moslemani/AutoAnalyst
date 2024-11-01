@@ -94,6 +94,7 @@
             color: #fff;
             width: 100%;
             max-width: 800px;
+            white-space: pre-wrap; /* Preserve formatting */
         }
 
         /* Additional Operations */
@@ -207,7 +208,7 @@
         <div class="card task-section">
             <h2>Additional Operations</h2>
             <form id="additionalOpsForm">
-                <input type="hidden" id="currentFilePath" name="file_path">
+                <input type="hidden" id="currentFilePath" name="file_key"> <!-- Updated name -->
 
                 <!-- Task Buttons -->
                 <div class="task-buttons">
@@ -301,13 +302,20 @@
                     statusDiv.innerHTML = `Task ID: ${data.task_id}<br>Preprocessing...`;
                     checkStatus(data.task_id, "preprocess");
                 } else {
-                    statusDiv.innerHTML = `Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Upload Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling to include data.error
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Upload Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML = `Error: ${error.message || error}`;
-                console.error(`Upload Fetch Error: ${error}`);
+                console.error(`Upload Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -321,7 +329,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
 
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
@@ -338,13 +346,20 @@
                     statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "pair_messages");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Pair Messages Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Pair Messages Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Pair Messages Fetch Error: ${error}`);
+                console.error(`Pair Messages Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -358,7 +373,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
 
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
@@ -375,13 +390,20 @@
                     statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "cs_split");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`CS Split Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`CS Split Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`CS Split Fetch Error: ${error}`);
+                console.error(`CS Split Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -395,7 +417,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
 
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
@@ -412,13 +434,20 @@
                     statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "sales_split");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Sales Split Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Sales Split Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Sales Split Fetch Error: ${error}`);
+                console.error(`Sales Split Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -432,7 +461,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
 
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
@@ -449,13 +478,20 @@
                     statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "make_readable");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Make Readable Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Make Readable Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Make Readable Fetch Error: ${error}`);
+                console.error(`Make Readable Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -469,7 +505,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
 
             const statusDiv = document.getElementById('status');
             statusDiv.style.display = 'block';
@@ -486,13 +522,20 @@
                     statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "save_to_csv");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Save to CSV Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Save to CSV Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Save to CSV Fetch Error: ${error}`);
+                console.error(`Save to CSV Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -509,7 +552,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
             formData.append("text_column", textColumn);
             formData.append("searched_text", searchedText);
 
@@ -528,13 +571,20 @@
                     statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "search_messages");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Search Messages Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Search Messages Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Search Messages Fetch Error: ${error}`);
+                console.error(`Search Messages Fetch Error:`, error);
                 enableActionButtons();
             }
         }
@@ -550,7 +600,7 @@
             }
 
             const formData = new FormData();
-            formData.append("file_path", filePath);
+            formData.append("file_key", filePath); // Updated key
             formData.append("chat_id", chatId);
 
             const statusDiv = document.getElementById('status');
@@ -568,13 +618,20 @@
                     statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
                     checkStatus(data.task_id, "filter_by_chat_id");
                 } else {
-                    statusDiv.innerHTML += `<br>Error: ${data.detail || data.message || JSON.stringify(data) || 'Unknown error.'}`;
-                    console.error(`Filter by Chat ID Error: ${data.detail || data.message || JSON.stringify(data)}`);
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Filter by Chat ID Error:`, data);
                     enableActionButtons();
                 }
             } catch (error) {
                 statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Filter by Chat ID Fetch Error: ${error}`);
+                console.error(`Filter by Chat ID Fetch Error:`, error);
                 enableActionButtons();
             }
         }
