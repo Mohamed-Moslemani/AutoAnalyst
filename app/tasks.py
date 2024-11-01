@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 import pandas as pd
 from celery import Celery
 from typing import Tuple, Optional
+from dotenv import load_dotenv
 from app.utils import (
     preprocess_dataframe,
     pair_messages,
@@ -23,6 +24,10 @@ import uuid
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
 # Retrieve environment variables
 REDIS_URL = os.getenv('REDIS_URL')
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
@@ -107,8 +112,8 @@ def preprocess_task(self, s3_input_key: str) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        processed_s3_key = f"processed/{base_name}_processed.parquet"  # Use Parquet for efficiency
-        local_processed_path = f"/tmp/{base_name}_processed.parquet"
+        processed_s3_key = f"processed/{base_name}_processed.csv"  # Changed to CSV
+        local_processed_path = f"/tmp/{base_name}_processed.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
@@ -132,8 +137,8 @@ def preprocess_task(self, s3_input_key: str) -> dict:
         # Further optimize after preprocessing
         df = optimize_dataframe(df)
 
-        # Save the preprocessed DataFrame to a Parquet file
-        df.to_parquet(local_processed_path, index=False)
+        # Save the preprocessed DataFrame to a CSV file
+        df.to_csv(local_processed_path, index=False)  # Changed to CSV
         logger.info(f"Preprocessed DataFrame saved to {local_processed_path}")
 
         # Upload the processed file back to S3
@@ -165,14 +170,19 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        paired_s3_key = f"processed/{base_name}_paired.parquet"
-        local_paired_path = f"/tmp/{base_name}_paired.parquet"
+        paired_s3_key = f"processed/{base_name}_paired.csv"  # Changed to CSV
+        local_paired_path = f"/tmp/{base_name}_paired.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for pairing. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -185,8 +195,8 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
         # Further optimize after pairing
         paired_df = optimize_dataframe(paired_df)
 
-        # Save the paired DataFrame to a Parquet file
-        paired_df.to_parquet(local_paired_path, index=False)
+        # Save the paired DataFrame to a CSV file
+        paired_df.to_csv(local_paired_path, index=False)  # Changed to CSV
         logger.info(f"Paired DataFrame saved to {local_paired_path}")
 
         # Upload the paired file back to S3
@@ -218,14 +228,19 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        cs_split_s3_key = f"processed/{base_name}_cs_split.parquet"
-        local_cs_split_path = f"/tmp/{base_name}_cs_split.parquet"
+        cs_split_s3_key = f"processed/{base_name}_cs_split.csv"  # Changed to CSV
+        local_cs_split_path = f"/tmp/{base_name}_cs_split.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for CS split. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -241,8 +256,8 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         # Further optimize after splitting
         cs_df = optimize_dataframe(cs_df)
 
-        # Save the CS split DataFrame to a Parquet file
-        cs_df.to_parquet(local_cs_split_path, index=False)
+        # Save the CS split DataFrame to a CSV file
+        cs_df.to_csv(local_cs_split_path, index=False)  # Changed to CSV
         logger.info(f"CS split DataFrame saved to {local_cs_split_path}")
 
         # Upload the CS split file back to S3
@@ -274,19 +289,24 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        sales_split_s3_key = f"processed/{base_name}_sales_split.parquet"
-        local_sales_split_path = f"/tmp/{base_name}_sales_split.parquet"
+        sales_split_s3_key = f"processed/{base_name}_sales_split.csv"  # Changed to CSV
+        local_sales_split_path = f"/tmp/{base_name}_sales_split.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for Sales split. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
 
-        # Define CS agent IDs
+        # Define CS agent IDs (consider renaming to sales_agents_ids if different)
         cs_agents_ids = [124760, 396575, 354259, 352740, 178283]
 
         # Split Sales chats
@@ -297,8 +317,8 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         # Further optimize after splitting
         sales_df = optimize_dataframe(sales_df)
 
-        # Save the Sales split DataFrame to a Parquet file
-        sales_df.to_parquet(local_sales_split_path, index=False)
+        # Save the Sales split DataFrame to a CSV file
+        sales_df.to_csv(local_sales_split_path, index=False)  # Changed to CSV
         logger.info(f"Sales split DataFrame saved to {local_sales_split_path}")
 
         # Upload the Sales split file back to S3
@@ -330,14 +350,19 @@ def search_messages_task(self, s3_input_key: str, text_column: str, searched_tex
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        search_messages_s3_key = f"processed/{base_name}_search_results.parquet"
-        local_search_messages_path = f"/tmp/{base_name}_search_results.parquet"
+        search_messages_s3_key = f"processed/{base_name}_search_results.csv"  # Changed to CSV
+        local_search_messages_path = f"/tmp/{base_name}_search_results.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for searching messages. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -350,8 +375,8 @@ def search_messages_task(self, s3_input_key: str, text_column: str, searched_tex
         # Further optimize after searching
         search_df = optimize_dataframe(search_df)
 
-        # Save the search result DataFrame to a Parquet file
-        search_df.to_parquet(local_search_messages_path, index=False)
+        # Save the search result DataFrame to a CSV file
+        search_df.to_csv(local_search_messages_path, index=False)  # Changed to CSV
         logger.info(f"Search messages DataFrame saved to {local_search_messages_path}")
 
         # Upload the search messages file back to S3
@@ -383,14 +408,19 @@ def filter_by_chat_id_task(self, s3_input_key: str, chat_id: int) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        filter_s3_key = f"processed/{base_name}_filtered_chat_{chat_id}.parquet"
-        local_filter_path = f"/tmp/{base_name}_filtered_chat_{chat_id}.parquet"
+        filter_s3_key = f"processed/{base_name}_filtered_chat_{chat_id}.csv"  # Changed to CSV
+        local_filter_path = f"/tmp/{base_name}_filtered_chat_{chat_id}.csv"     # Changed to CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for filtering by Chat ID. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -403,8 +433,8 @@ def filter_by_chat_id_task(self, s3_input_key: str, chat_id: int) -> dict:
         # Further optimize after filtering
         filtered_df = optimize_dataframe(filtered_df)
 
-        # Save the filtered DataFrame to a Parquet file
-        filtered_df.to_parquet(local_filter_path, index=False)
+        # Save the filtered DataFrame to a CSV file
+        filtered_df.to_csv(local_filter_path, index=False)  # Changed to CSV
         logger.info(f"Filtered DataFrame saved to {local_filter_path}")
 
         # Upload the filtered file back to S3
@@ -442,8 +472,13 @@ def make_readable_task(self, s3_input_key: str) -> dict:
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for making readable. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -487,14 +522,19 @@ def save_to_csv_task(self, s3_input_key: str) -> dict:
         # Define local paths
         local_input_path = f"/tmp/{uuid.uuid4()}_{os.path.basename(s3_input_key)}"
         base_name = os.path.splitext(os.path.basename(s3_input_key))[0]
-        csv_s3_key = f"processed/{base_name}.csv"
-        local_csv_path = f"/tmp/{base_name}.csv"
+        csv_s3_key = f"processed/{base_name}.csv"  # Already CSV
+        local_csv_path = f"/tmp/{base_name}.csv"     # Already CSV
 
         # Download the file from S3
         download_file_from_s3(s3_input_key, local_input_path)
 
-        # Read the DataFrame from the Parquet file
-        df = pd.read_parquet(local_input_path)
+        # Read the DataFrame from the CSV file
+        if s3_input_key.endswith('.csv'):
+            df = pd.read_csv(local_input_path)
+        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+            df = pd.read_excel(local_input_path)  # Adjust if necessary
+        else:
+            raise ValueError("Unsupported file format for saving to CSV. Only CSV and Excel files are supported.")
 
         # Optimize DataFrame
         df = optimize_dataframe(df)
@@ -515,7 +555,6 @@ def save_to_csv_task(self, s3_input_key: str) -> dict:
         gc.collect()
 
         return {'status': 'success', 'message': 'Data saved to CSV successfully!', 'csv_file_s3_key': csv_s3_key}
-
 
     except Exception as e:
         logger.error(f"Error in save_to_csv_task: {e}")
