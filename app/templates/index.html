@@ -213,8 +213,8 @@
                 <!-- Task Buttons -->
                 <div class="task-buttons">
                     <button type="button" onclick="pairMessages()" id="pairMessagesBtn" disabled>Pair Messages</button>
-                    <button type="button" onclick="csSplit()" id="csSplitBtn" disabled>CS Split</button>
                     <button type="button" onclick="salesSplit()" id="salesSplitBtn" disabled>Sales Split</button>
+                    <button type="button" onclick="csSplit()" id="csSplitBtn" disabled>CS Split</button>
                     <button type="button" onclick="makeReadable()" id="makeReadableBtn" disabled>Make Data GPT Readable</button>
                     <button type="button" onclick="saveToCSV()" id="saveToCSVBtn" disabled>Save to CSV</button>
                 </div>
@@ -239,16 +239,121 @@
 
     <!-- Footer -->
     <div class="footer">
-        &copy; 2024 Sales-CS Chats Analyzer. 800Storage Data Team - All rights reserved.
+        &copy; 2024 Sales - CS Chats Analyzer - 800Storage Data Team - All rights reserved.
     </div>
 
     <!-- JavaScript -->
     <script>
-        // Enable Action Buttons
+        /**
+         * Handles the completion of a task and updates the currentFilePath to the latest file.
+         * @param {string} operation - The completed operation/task name.
+         * @param {object} data - The result data from the completed task.
+         */
+        function handleTaskCompletion(operation, data) {
+            let newS3Key;
+            let downloadLabel;
+
+            switch(operation) {
+                case "preprocess_task":
+                    newS3Key = data.processed_file_s3_key;
+                    downloadLabel = "Processed File (CSV)";
+                    break;
+                case "pair_messages_task":
+                    newS3Key = data.paired_file_s3_key;
+                    downloadLabel = "Paired Messages (CSV)";
+                    break;
+                case "sales_split_task":
+                    newS3Key = data.sales_split_file_s3_key;
+                    downloadLabel = "Sales Split File (CSV)";
+                    break;
+                case "cs_split_task":
+                    newS3Key = data.cs_split_file_s3_key;
+                    downloadLabel = "CS Split File (CSV)";
+                    break;
+                case "make_readable_task":
+                    newS3Key = data.readable_file_s3_key;
+                    downloadLabel = "Readable File (TXT)";
+                    break;
+                case "save_to_csv_task":
+                    newS3Key = data.csv_file_s3_key;
+                    downloadLabel = "Final CSV File";
+                    break;
+                case "search_messages_task":
+                    newS3Key = data.search_messages_file_s3_key;
+                    downloadLabel = "Search Messages Result (CSV)";
+                    break;
+                case "filter_by_chat_id_task":
+                    newS3Key = data.filter_file_s3_key;
+                    downloadLabel = `Filtered Chat ID ${document.getElementById('filterChatId').value} (CSV)`;
+                    break;
+                default:
+                    console.error(`No handler for operation: ${operation}`);
+                    return;
+            }
+
+            if (newS3Key) {
+                const filename = newS3Key.split('/').pop();
+                document.getElementById('currentFilePath').value = newS3Key;
+                const statusDiv = document.getElementById('status');
+                statusDiv.innerHTML += ` <br><a href="/download/${filename}" target="_blank">Download ${downloadLabel}</a>`;
+
+                // Optionally, you can clear the file input after processing
+                if (operation === "preprocess_task") {
+                    document.getElementById('fileInput').value = "";
+                }
+            }
+
+            // Re-enable all buttons after task completion
+            enableActionButtons();
+        }
+
+        /**
+         * Checks the status of a Celery task periodically.
+         * @param {string} task_id - The Celery task ID.
+         * @param {string} operation - The operation/task name.
+         */
+        async function checkStatus(task_id, operation) {
+            const statusDiv = document.getElementById('status');
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/status/${task_id}`);
+                    const data = await response.json();
+                    console.log(`Status Check for Task ID ${task_id}:`, data);
+
+                    if (data.state === 'SUCCESS') {
+                        clearInterval(interval);
+                        if (data.result && data.result.message) {
+                            statusDiv.innerHTML += `<br>${data.result.message}`;
+                        }
+
+                        // Handle task completion and update the latest file
+                        handleTaskCompletion(operation, data.result);
+
+                    } else if (data.state === 'FAILURE') {
+                        clearInterval(interval);
+                        const errorMessage = (data.result && data.result.message) ? data.result.message : 'Unknown error.';
+                        statusDiv.innerHTML += `<br>Failed: ${errorMessage}`;
+                        enableActionButtons();
+                    } else {
+                        // For other states like PENDING, STARTED
+                        statusDiv.innerHTML += `<br>${data.state}`;
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    statusDiv.innerHTML += `<br>Error checking status: ${error}`;
+                    console.error(`Error checking status for Task ID ${task_id}:`, error);
+                    enableActionButtons();
+                }
+            }, 2000);
+        }
+
+        /**
+         * Enables all action buttons and input fields.
+         */
         function enableActionButtons() {
             document.getElementById('pairMessagesBtn').disabled = false;
-            document.getElementById('csSplitBtn').disabled = false;
             document.getElementById('salesSplitBtn').disabled = false;
+            document.getElementById('csSplitBtn').disabled = false;
             document.getElementById('makeReadableBtn').disabled = false;
             document.getElementById('saveToCSVBtn').disabled = false;
             document.getElementById('searchTextColumn').disabled = false;
@@ -258,11 +363,13 @@
             document.getElementById('filterByChatIdBtn').disabled = false;
         }
 
-        // Disable Action Buttons
+        /**
+         * Disables all action buttons and input fields.
+         */
         function disableActionButtons() {
             document.getElementById('pairMessagesBtn').disabled = true;
-            document.getElementById('csSplitBtn').disabled = true;
             document.getElementById('salesSplitBtn').disabled = true;
+            document.getElementById('csSplitBtn').disabled = true;
             document.getElementById('makeReadableBtn').disabled = true;
             document.getElementById('saveToCSVBtn').disabled = true;
             document.getElementById('searchTextColumn').disabled = true;
@@ -272,7 +379,9 @@
             document.getElementById('filterByChatIdBtn').disabled = true;
         }
 
-        // Upload and Preprocess File
+        /**
+         * Uploads and preprocesses the selected file.
+         */
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const statusDiv = document.getElementById('status');
@@ -300,7 +409,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML = `Task ID: ${data.task_id}<br>Preprocessing...`;
-                    checkStatus(data.task_id, "preprocess");
+                    checkStatus(data.task_id, "preprocess_task");  // Updated operation name
                 } else {
                     // Enhanced error handling to include data.error
                     if (data.detail) {
@@ -320,7 +429,9 @@
             }
         }
 
-        // Pair Messages
+        /**
+         * Initiates the Pair Messages task.
+         */
         async function pairMessages() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -344,7 +455,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML += `<br>Pairing Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "pair_messages");
+                    checkStatus(data.task_id, "pair_messages_task"); // Updated operation name
                 } else {
                     // Enhanced error handling
                     if (data.detail) {
@@ -364,51 +475,9 @@
             }
         }
 
-        // CS Split
-        async function csSplit() {
-            const filePath = document.getElementById('currentFilePath').value;
-            if (!filePath) {
-                alert("Please upload and preprocess a file first.");
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append("file_key", filePath); // Updated key
-
-            const statusDiv = document.getElementById('status');
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML += "<br>Splitting CS chats...";
-            disableActionButtons();
-
-            try {
-                const response = await fetch('/cs_split/', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                if (response.ok && data.task_id) {
-                    statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "cs_split");
-                } else {
-                    // Enhanced error handling
-                    if (data.detail) {
-                        data.detail.forEach(error => {
-                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
-                        });
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
-                    }
-                    console.error(`CS Split Error:`, data);
-                    enableActionButtons();
-                }
-            } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`CS Split Fetch Error:`, error);
-                enableActionButtons();
-            }
-        }
-
-        // Sales Split
+        /**
+         * Initiates the Sales Split task.
+         */
         async function salesSplit() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -432,7 +501,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML += `<br>Sales Split Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "sales_split");
+                    checkStatus(data.task_id, "sales_split_task"); // Updated operation name
                 } else {
                     // Enhanced error handling
                     if (data.detail) {
@@ -452,7 +521,55 @@
             }
         }
 
-        // Make Readable
+        /**
+         * Initiates the CS Split task.
+         */
+        async function csSplit() {
+            const filePath = document.getElementById('currentFilePath').value;
+            if (!filePath) {
+                alert("Please upload and preprocess a file first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file_key", filePath); // Updated key
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML += "<br>Splitting CS chats...";
+            disableActionButtons();
+
+            try {
+                const response = await fetch('/cs_split/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>CS Split Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "cs_split_task"); // Updated operation name
+                } else {
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`CS Split Error:`, data);
+                    enableActionButtons();
+                }
+            } catch (error) {
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`CS Split Fetch Error:`, error);
+                enableActionButtons();
+            }
+        }
+
+        /**
+         * Initiates the Make Readable task.
+         */
         async function makeReadable() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -476,7 +593,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML += `<br>Make Readable Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "make_readable");
+                    checkStatus(data.task_id, "make_readable_task"); // Updated operation name
                 } else {
                     // Enhanced error handling
                     if (data.detail) {
@@ -496,7 +613,9 @@
             }
         }
 
-        // Save to CSV
+        /**
+         * Initiates the Save to CSV task.
+         */
         async function saveToCSV() {
             const filePath = document.getElementById('currentFilePath').value;
             if (!filePath) {
@@ -520,7 +639,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML += `<br>Save to CSV Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "save_to_csv");
+                    checkStatus(data.task_id, "save_to_csv_task"); // Updated operation name
                 } else {
                     // Enhanced error handling
                     if (data.detail) {
@@ -540,7 +659,9 @@
             }
         }
 
-        // Search Messages
+        /**
+         * Initiates the Search Messages task.
+         */
         async function searchMessages() {
             const filePath = document.getElementById('currentFilePath').value;
             const textColumn = document.getElementById('searchTextColumn').value.trim();
@@ -569,7 +690,7 @@
                 const data = await response.json();
                 if (response.ok && data.task_id) {
                     statusDiv.innerHTML += `<br>Search Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "search_messages");
+                    checkStatus(data.task_id, "search_messages_task"); // Updated operation name
                 } else {
                     // Enhanced error handling
                     if (data.detail) {
@@ -589,123 +710,66 @@
             }
         }
 
-        // Filter by Chat ID
-        async function filterByChatId() {
-            const filePath = document.getElementById('currentFilePath').value;
-            const chatId = document.getElementById('filterChatId').value.trim();
+        /**
+         * Initiates the Filter by Chat ID task.
+         */
+         async function filterByChatId() {
+    const filePath = document.getElementById('currentFilePath').value;
+    const chatId = document.getElementById('filterChatId').value.trim();
 
-            if (!filePath || !chatId) {
-                alert("Please upload a file and enter a Chat ID.");
-                return;
-            }
+    if (!filePath || !chatId) {
+        alert("Please upload a file and enter a Chat ID.");
+        return;
+    }
 
-            const formData = new FormData();
-            formData.append("file_key", filePath); // Updated key
-            formData.append("chat_id", chatId);
+    const formData = new FormData();
+    formData.append("file_key", filePath); // Updated key
+    formData.append("chat_id", chatId);     // Ensure it's a string
 
-            const statusDiv = document.getElementById('status');
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML += "<br>Filtering by Chat ID...";
-            disableActionButtons();
+    const statusDiv = document.getElementById('status');
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML += "<br>Filtering by Chat ID...";
+    disableActionButtons();
 
-            try {
-                const response = await fetch('/filter_by_chat_id/', {
-                    method: 'POST',
-                    body: formData
+    try {
+        const response = await fetch('/filter_by_chat_id/', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok && data.task_id) {
+            statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
+            checkStatus(data.task_id, "filter_by_chat_id_task"); // Updated operation name
+        } else {
+            // Enhanced error handling
+            if (data.detail) {
+                data.detail.forEach(error => {
+                    statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
                 });
-                const data = await response.json();
-                if (response.ok && data.task_id) {
-                    statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
-                    checkStatus(data.task_id, "filter_by_chat_id");
-                } else {
-                    // Enhanced error handling
-                    if (data.detail) {
-                        data.detail.forEach(error => {
-                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
-                        });
-                    } else {
-                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
-                    }
-                    console.error(`Filter by Chat ID Error:`, data);
-                    enableActionButtons();
-                }
-            } catch (error) {
-                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-                console.error(`Filter by Chat ID Fetch Error:`, error);
-                enableActionButtons();
+            } else {
+                statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
             }
+            console.error(`Filter by Chat ID Error:`, data);
+            enableActionButtons();
+        }
+    } catch (error) {
+        statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+        console.error(`Filter by Chat ID Fetch Error:`, error);
+        enableActionButtons();
+    }
+}
+
+
+        /**
+         * Optionally, you can implement a function to reset the workflow.
+         */
+        function resetWorkflow() {
+            document.getElementById('currentFilePath').value = "";
+            document.getElementById('status').innerHTML = "";
+            enableActionButtons();
+            document.getElementById('fileInput').value = "";
         }
 
-        // Check Task Status
-        async function checkStatus(task_id, operation) {
-            const statusDiv = document.getElementById('status');
-            const interval = setInterval(async () => {
-                try {
-                    const response = await fetch(`/status/${task_id}`);
-                    const data = await response.json();
-                    console.log(`Status Check for Task ID ${task_id}:`, data);
-
-                    if (data.state === 'SUCCESS') {
-                        clearInterval(interval);
-                        if (data.result && data.result.message) {
-                            statusDiv.innerHTML += `<br>${data.result.message}`;
-                        }
-
-                        // Handle specific operations
-                        if (operation === "preprocess" && data.result.processed_file_s3_key) {
-                            const filename = data.result.processed_file_s3_key.split('/').pop();
-                            document.getElementById('currentFilePath').value = data.result.processed_file_s3_key;
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Processed File (Parquet)</a>`;
-                            enableActionButtons();
-                        }
-
-                        if (operation === "pair_messages" && data.result.paired_file_s3_key) {
-                            const filename = data.result.paired_file_s3_key.split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Paired Messages (Parquet)</a>`;
-                            enableActionButtons();
-                        }
-
-                        if (operation === "cs_split" && data.result.cs_split_file_s3_key) {
-                            const filename = data.result.cs_split_file_s3_key.split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download CS Split File (Parquet)</a>`;
-                            enableActionButtons();
-                        }
-
-                        if (operation === "sales_split" && data.result.sales_split_file_s3_key) {
-                            const filename = data.result.sales_split_file_s3_key.split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Sales Split File (Parquet)</a>`;
-                            enableActionButtons();
-                        }
-
-                        if (operation === "make_readable" && data.result.readable_file_s3_key) {
-                            const filename = data.result.readable_file_s3_key.split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download Readable File (TXT)</a>`;
-                            enableActionButtons();
-                        }
-
-                        if (operation === "save_to_csv" && data.result.csv_file_s3_key) {
-                            const filename = data.result.csv_file_s3_key.split('/').pop();
-                            statusDiv.innerHTML += ` <a href="/download/${filename}" target="_blank">Download CSV File</a>`;
-                            enableActionButtons();
-                        }
-
-                    } else if (data.state === 'FAILURE') {
-                        clearInterval(interval);
-                        const errorMessage = (data.result && data.result.message) ? data.result.message : 'Unknown error.';
-                        statusDiv.innerHTML += `<br>Failed: ${errorMessage}`;
-                        enableActionButtons();
-                    } else {
-                        // For other states like PENDING, STARTED
-                        statusDiv.innerHTML += `<br>${data.state}`;
-                    }
-                } catch (error) {
-                    clearInterval(interval);
-                    statusDiv.innerHTML += `<br>Error checking status: ${error}`;
-                    console.error(`Error checking status for Task ID ${task_id}:`, error);
-                    enableActionButtons();
-                }
-            }, 2000);
-        }
     </script>
 </body>
 </html>
