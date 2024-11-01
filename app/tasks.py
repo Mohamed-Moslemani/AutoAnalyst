@@ -7,7 +7,6 @@ from botocore.exceptions import ClientError
 import pandas as pd
 from celery import Celery
 from typing import Tuple, Optional
-from dotenv import load_dotenv
 from app.utils import (
     preprocess_dataframe,
     pair_messages,
@@ -24,7 +23,6 @@ import uuid
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-load_dotenv()   
 # Retrieve environment variables
 REDIS_URL = os.getenv('REDIS_URL')
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
