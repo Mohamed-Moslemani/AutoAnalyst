@@ -167,12 +167,15 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-    
-cs_agents_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
-
+    cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
 
 def parse_sender_ids(sender_ids_str: str) -> List[int]:
-    """Helper function to parse outgoing_sender_ids string into a flat list of integers."""
+    """
+    Parses the outgoing_sender_ids string into a flat list of integers.
+    - Converts floats to integers.
+    - Flattens nested lists.
+    - Excludes non-integer and NaN values.
+    """
     try:
         parsed = ast.literal_eval(sender_ids_str)
         if not isinstance(parsed, list):
@@ -191,12 +194,18 @@ def parse_sender_ids(sender_ids_str: str) -> List[int]:
         return flat_list
     except (ValueError, SyntaxError):
         return []
-    
-    
+
 def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits the DataFrame into CS chats by including only chats where outgoing_sender_ids
     contain any CS agent IDs.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (set): Set of CS agent sender IDs.
+    
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: The CS DataFrame, a message, and a success flag.
     """
     try:
         # Check for the required column
@@ -219,10 +228,18 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFram
 
     except Exception as e:
         return None, f"Error in cs_split: {str(e)}", False
+
 def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits the DataFrame into sales chats by excluding chats where outgoing_sender_ids
     contain any CS agent IDs.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (set): Set of CS agent sender IDs.
+    
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: The sales DataFrame, a message, and a success flag.
     """
     try:
         if 'outgoing_sender_ids' not in df.columns:
@@ -253,7 +270,6 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataF
 
     except Exception as e:
         return None, f"Error in sales_split: {str(e)}", False
-
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
