@@ -168,6 +168,15 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
     
+cs_agents_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+
+def parse_sender_ids(sender_ids_str):
+    """Helper function to parse outgoing_sender_ids string into a list."""
+    try:
+        return ast.literal_eval(sender_ids_str)
+    except (ValueError, SyntaxError):
+        return []
+
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits the DataFrame into CS chats by including only chats where outgoing_sender_ids
@@ -185,32 +194,17 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.Da
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
 
-        # Function to parse outgoing_sender_ids and extract the first sender ID as integer
-        def get_first_sender_id(sender_ids_str):
-            try:
-                # Safely evaluate the string to a Python list
-                sender_ids = ast.literal_eval(sender_ids_str)
-                if isinstance(sender_ids, list) and len(sender_ids) > 0:
-                    first_id = sender_ids[0]
-                    if isinstance(first_id, float) and not math.isnan(first_id):
-                        return int(first_id)
-                    elif isinstance(first_id, int):
-                        return first_id
-                return None
-            except:
-                return None
+        # Parse outgoing_sender_ids to lists
+        df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
 
-        # Apply the function to extract the first sender ID
-        df['first_sender_id'] = df['outgoing_sender_ids'].apply(get_first_sender_id)
-
-        # Filter rows where first_sender_id is in cs_agents_ids
-        cs_df = df[df['first_sender_id'].isin(cs_agents_ids)]
+        # Filter rows where any sender ID in parsed_sender_ids is in cs_agents_ids
+        cs_df = df[df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
 
         if cs_df.empty:
             return None, "No CS chats found.", False
 
-        # Drop the temporary 'first_sender_id' column
-        cs_df = cs_df.drop(columns=['first_sender_id'])
+        # Drop the temporary 'parsed_sender_ids' column
+        cs_df = cs_df.drop(columns=['parsed_sender_ids'])
 
         return cs_df, "CS chats filtered successfully!", True
 
@@ -235,60 +229,33 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
 
-        # Function to parse outgoing_sender_ids and extract the first sender ID as integer
-        def get_first_sender_id(sender_ids):
-            if isinstance(sender_ids, list):
-                if len(sender_ids) > 0:
-                    first_id = sender_ids[0]
-                    if isinstance(first_id, float) and not math.isnan(first_id):
-                        return int(first_id)
-                    elif isinstance(first_id, int):
-                        return first_id
-            elif isinstance(sender_ids, str):
-                try:
-                    sender_ids_list = ast.literal_eval(sender_ids)
-                    if isinstance(sender_ids_list, list) and len(sender_ids_list) > 0:
-                        first_id = sender_ids_list[0]
-                        if isinstance(first_id, float) and not math.isnan(first_id):
-                            return int(first_id)
-                        elif isinstance(first_id, int):
-                            return first_id
-                except:
-                    pass
-            return None
+        # Parse outgoing_sender_ids to lists
+        df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
 
-        # Apply the function to extract the first sender ID
-        df['first_sender_id'] = df['outgoing_sender_ids'].apply(get_first_sender_id)
+        # Count rows with missing or empty parsed_sender_ids
+        missing_sender_id_count = df['parsed_sender_ids'].apply(lambda x: len(x) == 0).sum()
 
-        # Count rows with missing sender_id
-        missing_sender_id_count = df['first_sender_id'].isnull().sum()
+        # Filter out rows where any sender ID in parsed_sender_ids is in cs_agents_ids
+        sales_df = df[~df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
 
-        # Filter out rows where first_sender_id is in cs_agents_ids
-        sales_df = df[~df['first_sender_id'].isin(cs_agents_ids)]
-
-        # Exclude rows with missing sender_id from sales_df
-        sales_df = sales_df.dropna(subset=['first_sender_id'])
+        # Exclude rows with empty parsed_sender_ids
+        sales_df = sales_df[df['parsed_sender_ids'].apply(lambda x: len(x) > 0)]
 
         if sales_df.empty:
-            if missing_sender_id_count > 0:
-                message = f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id."
-            else:
-                message = "No Sales chats found."
+            message = f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id." if missing_sender_id_count > 0 else "No Sales chats found."
             return None, message, False
 
-        else:
-            if missing_sender_id_count > 0:
-                message = f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found."
-            else:
-                message = "Sales chats filtered successfully!"
+        message = f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found." if missing_sender_id_count > 0 else "Sales chats filtered successfully!"
 
-            # Drop the temporary 'first_sender_id' column
-            sales_df = sales_df.drop(columns=['first_sender_id'])
+        # Drop the temporary 'parsed_sender_ids' column
+        sales_df = sales_df.drop(columns=['parsed_sender_ids'])
 
-            return sales_df, message, True
+        return sales_df, message, True
 
     except Exception as e:
         return None, f"Error in sales_split: {str(e)}", False
+    
+
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
@@ -390,7 +357,7 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     except Exception as e:
         return None, f"Error making data readable: {str(e)}"
     
-    
+
 def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     try:
         for col in df.select_dtypes(include=['int', 'float']).columns:

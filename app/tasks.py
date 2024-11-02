@@ -167,6 +167,8 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
 
+cs_agents_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
 def cs_split_task(self, s3_input_key: str) -> dict:
     try:
@@ -175,17 +177,18 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         cs_split_s3_key = f"processed/{base_name}_cs_split.csv"
         local_cs_split_path = f"/tmp/{base_name}_cs_split.csv"
 
+        # Download and load the input file
         download_file_from_s3(s3_input_key, local_input_path)
-
         if s3_input_key.endswith('.csv'):
             df = pd.read_csv(local_input_path)
-        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+        elif s3_input_key.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(local_input_path)
+        elif s3_input_key.endswith('.parquet'):
+            df = pd.read_parquet(local_input_path)
         else:
-            raise ValueError("Unsupported file format for CS split. Only CSV and Excel files are supported.")
+            raise ValueError("Unsupported file format for CS split. Only CSV, Excel, and Parquet files are supported.")
 
         df = optimize_dataframe(df)
-        cs_agents_ids = [124760, 396575, 354259, 352740, 178283,398639,467165,277476,464154,1023356]
         cs_df, message, success = cs_split(df, cs_agents_ids)
         if not success:
             raise ValueError(message)
@@ -193,6 +196,7 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         cs_df.to_csv(local_cs_split_path, index=False)
         upload_file_to_s3(local_cs_split_path, cs_split_s3_key)
 
+        # Clean up local files and memory
         remove_local_file(local_input_path)
         remove_local_file(local_cs_split_path)
         del df, cs_df
@@ -211,17 +215,18 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         sales_split_s3_key = f"processed/{base_name}_sales_split.csv"
         local_sales_split_path = f"/tmp/{base_name}_sales_split.csv"
 
+        # Download and load the input file
         download_file_from_s3(s3_input_key, local_input_path)
-
         if s3_input_key.endswith('.csv'):
             df = pd.read_csv(local_input_path)
-        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+        elif s3_input_key.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(local_input_path)
+        elif s3_input_key.endswith('.parquet'):
+            df = pd.read_parquet(local_input_path)
         else:
-            raise ValueError("Unsupported file format for Sales split. Only CSV and Excel files are supported.")
+            raise ValueError("Unsupported file format for Sales split. Only CSV, Excel, and Parquet files are supported.")
 
         df = optimize_dataframe(df)
-        cs_agents_ids = [124760, 396575, 354259, 352740, 178283]
         sales_df, message, success = sales_split(df, cs_agents_ids)
         if not success:
             raise ValueError(message)
@@ -229,6 +234,7 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         sales_df.to_csv(local_sales_split_path, index=False)
         upload_file_to_s3(local_sales_split_path, sales_split_s3_key)
 
+        # Clean up local files and memory
         remove_local_file(local_input_path)
         remove_local_file(local_sales_split_path)
         del df, sales_df
