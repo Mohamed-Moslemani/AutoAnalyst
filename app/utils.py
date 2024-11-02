@@ -3,6 +3,7 @@ import json
 from typing import Tuple, Optional, List, Dict
 import ast 
 
+import math
 def extract_text(content: str) -> str:
     try:
         message_data = json.loads(content)
@@ -166,28 +167,128 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-
+    
 def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Splits the DataFrame into CS chats by including only chats where outgoing_sender_ids
+    contain any CS agent IDs.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (List[int]): List of CS agent sender IDs.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: The CS DataFrame, a message, and a success flag.
+    """
     try:
+        # Check for the required column
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
-        cs_df = df[df['outgoing_sender_ids'].apply(
-            lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
-        ).isin(cs_agents_ids)]
-        return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
+
+        # Function to parse outgoing_sender_ids and extract the first sender ID as integer
+        def get_first_sender_id(sender_ids_str):
+            try:
+                # Safely evaluate the string to a Python list
+                sender_ids = ast.literal_eval(sender_ids_str)
+                if isinstance(sender_ids, list) and len(sender_ids) > 0:
+                    first_id = sender_ids[0]
+                    if isinstance(first_id, float) and not math.isnan(first_id):
+                        return int(first_id)
+                    elif isinstance(first_id, int):
+                        return first_id
+                return None
+            except:
+                return None
+
+        # Apply the function to extract the first sender ID
+        df['first_sender_id'] = df['outgoing_sender_ids'].apply(get_first_sender_id)
+
+        # Filter rows where first_sender_id is in cs_agents_ids
+        cs_df = df[df['first_sender_id'].isin(cs_agents_ids)]
+
+        if cs_df.empty:
+            return None, "No CS chats found.", False
+
+        # Drop the temporary 'first_sender_id' column
+        cs_df = cs_df.drop(columns=['first_sender_id'])
+
+        return cs_df, "CS chats filtered successfully!", True
+
     except Exception as e:
-        return None, str(e), False
+        return None, f"Error in cs_split: {str(e)}", False
+
 
 def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Splits the DataFrame into sales chats by excluding chats where outgoing_sender_ids
+    contain any CS agent IDs.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        cs_agents_ids (List[int]): List of CS agent sender IDs.
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], str, bool]: The sales DataFrame, a message, and a success flag.
+    """
     try:
+        # Check for the required column
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
-        sales_df = df[~df['outgoing_sender_ids'].apply(
-            lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
-        ).isin(cs_agents_ids)]
-        return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
+
+        # Function to parse outgoing_sender_ids and extract the first sender ID as integer
+        def get_first_sender_id(sender_ids):
+            if isinstance(sender_ids, list):
+                if len(sender_ids) > 0:
+                    first_id = sender_ids[0]
+                    if isinstance(first_id, float) and not math.isnan(first_id):
+                        return int(first_id)
+                    elif isinstance(first_id, int):
+                        return first_id
+            elif isinstance(sender_ids, str):
+                try:
+                    sender_ids_list = ast.literal_eval(sender_ids)
+                    if isinstance(sender_ids_list, list) and len(sender_ids_list) > 0:
+                        first_id = sender_ids_list[0]
+                        if isinstance(first_id, float) and not math.isnan(first_id):
+                            return int(first_id)
+                        elif isinstance(first_id, int):
+                            return first_id
+                except:
+                    pass
+            return None
+
+        # Apply the function to extract the first sender ID
+        df['first_sender_id'] = df['outgoing_sender_ids'].apply(get_first_sender_id)
+
+        # Count rows with missing sender_id
+        missing_sender_id_count = df['first_sender_id'].isnull().sum()
+
+        # Filter out rows where first_sender_id is in cs_agents_ids
+        sales_df = df[~df['first_sender_id'].isin(cs_agents_ids)]
+
+        # Exclude rows with missing sender_id from sales_df
+        sales_df = sales_df.dropna(subset=['first_sender_id'])
+
+        if sales_df.empty:
+            if missing_sender_id_count > 0:
+                message = f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id."
+            else:
+                message = "No Sales chats found."
+            return None, message, False
+
+        else:
+            if missing_sender_id_count > 0:
+                message = f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found."
+            else:
+                message = "Sales chats filtered successfully!"
+
+            # Drop the temporary 'first_sender_id' column
+            sales_df = sales_df.drop(columns=['first_sender_id'])
+
+            return sales_df, message, True
+
     except Exception as e:
-        return None, str(e), False
+        return None, f"Error in sales_split: {str(e)}", False
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
@@ -218,7 +319,7 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
             outgoing_sender_ids = row.get('outgoing_sender_ids', '[]')
             incoming_texts = row.get('incoming_texts', '[]')
             outgoing_texts = row.get('outgoing_texts', '[]')
-            
+
             # Convert string representations of lists to actual lists if necessary
             if isinstance(incoming_texts, str):
                 try:
@@ -236,21 +337,54 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
                 except (ValueError, SyntaxError):
                     outgoing_sender_ids = []  # Fallback if conversion fails
 
-            # Only show Chat ID, Contact ID, and Outgoing Sender IDs if the contact ID changes
+            # Extract first sender IDs as integers (handling floats and NaNs)
+            parsed_outgoing_sender_ids = []
+            for sender_id in outgoing_sender_ids:
+                if isinstance(sender_id, float) and not math.isnan(sender_id):
+                    parsed_outgoing_sender_ids.append(int(sender_id))
+                elif isinstance(sender_id, int):
+                    parsed_outgoing_sender_ids.append(sender_id)
+                else:
+                    # Handle non-integer and NaN sender IDs
+                    parsed_outgoing_sender_ids.append("No sender ID found")
+
+            # Only show Chat ID, Contact ID if the Contact ID changes
             if contact_id != previous_contact_id:
                 if previous_contact_id is not None:
                     output += "-" * 70 + "\n"  # Separator only if the contact ID changes
-                output += f"Chat ID: {chat_id}\nContact ID: {contact_id}\n"
-                output += f"Outgoing Sender IDs: {', '.join(str(sender) for sender in outgoing_sender_ids)}\n"
+                output += f"Chat ID: {chat_id}\nContact ID: {contact_id}\n\n"
+                previous_contact_id = contact_id
 
-            # Add messages
-            output += "Incoming Messages:\n"
-            output += ", ".join(f"'{msg.strip()}'" for msg in incoming_texts if isinstance(msg, str))
-            output += "\nOutgoing Messages:\n"
-            output += ", ".join(f'"{msg.strip()}"' for msg in outgoing_texts if isinstance(msg, str))
-            output += "\n\n"  # Add extra newlines for spacing
+            # Determine the number of messages to iterate through
+            max_messages = max(len(incoming_texts), len(outgoing_texts))
 
-            previous_contact_id = contact_id
+            for i in range(max_messages):
+                # Add Incoming Message
+                if i < len(incoming_texts):
+                    msg = incoming_texts[i]
+                    if isinstance(msg, str):
+                        msg = msg.strip()
+                        output += f"Incoming Message: '{msg}'\n"
+                    else:
+                        output += "Incoming Message: 'Invalid message format'\n"
+                else:
+                    output += "Incoming Message: 'No message'\n"
+
+                # Add Outgoing Message with Sender ID
+                if i < len(outgoing_texts):
+                    msg = outgoing_texts[i]
+                    if i < len(parsed_outgoing_sender_ids):
+                        sender_id = parsed_outgoing_sender_ids[i]
+                    else:
+                        sender_id = "No sender ID found"
+
+                    if isinstance(msg, str):
+                        msg = msg.strip()
+                        output += f'Outgoing Message - Sender ID: {sender_id}: "{msg}"\n\n'
+                    else:
+                        output += f'Outgoing Message - Sender ID: {sender_id}: "Invalid message format"\n\n'
+                else:
+                    output += 'Outgoing Message - Sender ID: No sender ID found: "No message"\n\n'
 
         return output, "Data made readable successfully!"
     except Exception as e:

@@ -185,7 +185,7 @@ def cs_split_task(self, s3_input_key: str) -> dict:
             raise ValueError("Unsupported file format for CS split. Only CSV and Excel files are supported.")
 
         df = optimize_dataframe(df)
-        cs_agents_ids = [124760, 396575, 354259, 352740, 178283]
+        cs_agents_ids = [124760, 396575, 354259, 352740, 178283,398639,467165,277476,464154,1023356]
         cs_df, message, success = cs_split(df, cs_agents_ids)
         if not success:
             raise ValueError(message)
