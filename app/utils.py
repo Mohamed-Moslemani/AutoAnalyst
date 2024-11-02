@@ -296,6 +296,7 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataF
     except Exception as e:
         return None, f"Error in sales_split: {str(e)}", False
 
+
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
         if text_column not in df.columns:
