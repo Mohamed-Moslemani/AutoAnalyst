@@ -212,9 +212,10 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
         output = ""
         previous_contact_id = None
 
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             chat_id = row.get('Chat ID', 'N/A')
             contact_id = row.get('Contact ID', 'N/A')
+            outgoing_sender_ids = row.get('outgoing_sender_ids', '[]')
             incoming_texts = row.get('incoming_texts', '[]')
             outgoing_texts = row.get('outgoing_texts', '[]')
             
@@ -229,27 +230,32 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
                     outgoing_texts = ast.literal_eval(outgoing_texts)
                 except (ValueError, SyntaxError):
                     outgoing_texts = []  # Fallback if conversion fails
+            if isinstance(outgoing_sender_ids, str):
+                try:
+                    outgoing_sender_ids = ast.literal_eval(outgoing_sender_ids)
+                except (ValueError, SyntaxError):
+                    outgoing_sender_ids = []  # Fallback if conversion fails
 
-            # Display Chat ID and Contact ID once at the beginning of each new contact
+            # Only show Chat ID, Contact ID, and Outgoing Sender IDs if the contact ID changes
             if contact_id != previous_contact_id:
                 if previous_contact_id is not None:
-                    output += "-" * 70 + "\n"  # Separator between different contacts
-                
+                    output += "-" * 70 + "\n"  # Separator only if the contact ID changes
                 output += f"Chat ID: {chat_id}\nContact ID: {contact_id}\n"
-                previous_contact_id = contact_id
+                output += f"Outgoing Sender IDs: {', '.join(str(sender) for sender in outgoing_sender_ids)}\n"
 
-            # Add messages under their respective labels
-            if incoming_texts:
-                output += "Incoming Messages:\n"
-                output += "".join(f"- '{msg.strip()}'\n" for msg in incoming_texts if isinstance(msg, str))
-            if outgoing_texts:
-                output += "Outgoing Messages:\n"
-                output += "".join(f"- \"{msg.strip()}\"\n" for msg in outgoing_texts if isinstance(msg, str))
-            output += "\n"
-        
+            # Add messages
+            output += "Incoming Messages:\n"
+            output += ", ".join(f"'{msg.strip()}'" for msg in incoming_texts if isinstance(msg, str))
+            output += "\nOutgoing Messages:\n"
+            output += ", ".join(f'"{msg.strip()}"' for msg in outgoing_texts if isinstance(msg, str))
+            output += "\n\n"  # Add extra newlines for spacing
+
+            previous_contact_id = contact_id
+
         return output, "Data made readable successfully!"
     except Exception as e:
         return None, f"Error making data readable: {str(e)}"
+    
     
 def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     try:
