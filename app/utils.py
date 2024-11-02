@@ -167,32 +167,33 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-    cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
+   cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
 
 def parse_sender_ids(sender_ids_str: str) -> List[int]:
     """
     Parses the outgoing_sender_ids string into a flat list of integers.
     - Converts floats to integers.
-    - Flattens nested lists.
+    - Recursively flattens any nested lists.
     - Excludes non-integer and NaN values.
     """
+    def flatten(items):
+        for item in items:
+            if isinstance(item, list):
+                yield from flatten(item)
+            elif isinstance(item, (int, float)) and not math.isnan(item):
+                yield int(item)
+            # Ignore non-numeric and NaN values
+
     try:
         parsed = ast.literal_eval(sender_ids_str)
         if not isinstance(parsed, list):
+            print(f"Warning: Parsed sender_ids is not a list: {parsed}")
             return []
-        
-        flat_list = []
-        for item in parsed:
-            if isinstance(item, list):
-                # Flatten nested lists
-                for sub_item in item:
-                    if isinstance(sub_item, (int, float)) and not math.isnan(sub_item):
-                        flat_list.append(int(sub_item))
-            elif isinstance(item, (int, float)) and not math.isnan(item):
-                flat_list.append(int(item))
-            # Ignore non-numeric and nan values
+        flat_list = list(flatten(parsed))
+        print(f"Debug: Original: {sender_ids_str} => Parsed: {flat_list}")  # Debugging Statement
         return flat_list
-    except (ValueError, SyntaxError):
+    except (ValueError, SyntaxError) as e:
+        print(f"Error parsing sender_ids_str '{sender_ids_str}': {e}")  # Debugging Statement
         return []
 
 def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
@@ -215,7 +216,17 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFram
         # Parse outgoing_sender_ids to lists of ints
         df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
 
-        # Filter rows where any sender ID in parsed_sender_ids is in cs_agents_ids
+        # Debugging: Check for any lists inside parsed_sender_ids
+        problematic_rows = df[df['parsed_sender_ids'].apply(lambda x: any(isinstance(id, list) for id in x))]
+        if not problematic_rows.empty:
+            print("Error: The following rows have lists within 'parsed_sender_ids':")
+            print(problematic_rows[['Chat ID', 'parsed_sender_ids']])
+            # Handle or remove these rows as needed
+            # For this example, we'll exclude them from cs_df
+            df = df[~df.index.isin(problematic_rows.index)]
+            print("Excluded rows with lists in 'parsed_sender_ids' from cs_split.")
+
+        # Now, proceed to filter
         cs_df = df[df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
 
         if cs_df.empty:
@@ -242,29 +253,41 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataF
         Tuple[Optional[pd.DataFrame], str, bool]: The sales DataFrame, a message, and a success flag.
     """
     try:
-        if 'outgoing_sender_ids' not in df.columns:
-            return None, "Missing required column: 'outgoing_sender_ids'", False
-
-        # Parse outgoing_sender_ids to lists of ints
-        df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
+        if 'parsed_sender_ids' not in df.columns:
+            return None, "Missing required column: 'parsed_sender_ids'", False
 
         # Track rows with missing sender IDs
         missing_sender_id_count = df['parsed_sender_ids'].apply(lambda x: len(x) == 0).sum()
 
-        # Filter out rows where any sender ID in parsed_sender_ids is in cs_agents_ids
+        # Debugging: Check for any lists inside parsed_sender_ids
+        problematic_rows = df[df['parsed_sender_ids'].apply(lambda x: any(isinstance(id, list) for id in x))]
+        if not problematic_rows.empty:
+            print("Error: The following rows have lists within 'parsed_sender_ids':")
+            print(problematic_rows[['Chat ID', 'parsed_sender_ids']])
+            # Handle or remove these rows as needed
+            # For this example, we'll exclude them from sales_df
+            df = df[~df.index.isin(problematic_rows.index)]
+            print("Excluded rows with lists in 'parsed_sender_ids' from sales_split.")
+
+        # Filter out rows where any sender ID is in cs_agents_ids
         sales_df = df[~df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
 
         # Exclude rows with empty parsed_sender_ids from sales_df directly
         sales_df = sales_df[sales_df['parsed_sender_ids'].apply(lambda x: len(x) > 0)]
 
         if sales_df.empty:
-            message = f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id." if missing_sender_id_count > 0 else "No Sales chats found."
+            message = (
+                f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id."
+                if missing_sender_id_count > 0
+                else "No Sales chats found."
+            )
             return None, message, False
 
-        message = f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found." if missing_sender_id_count > 0 else "Sales chats filtered successfully!"
-
-        # Drop the temporary 'parsed_sender_ids' column
-        sales_df = sales_df.drop(columns=['parsed_sender_ids'])
+        message = (
+            f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found."
+            if missing_sender_id_count > 0
+            else "Sales chats filtered successfully!"
+        )
 
         return sales_df, message, True
 
