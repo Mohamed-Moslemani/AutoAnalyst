@@ -57,22 +57,27 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     try:
         if df is None or df.empty:
             raise ValueError("No DataFrame loaded. Please upload and preprocess the file.")
+        
         paired_rows = []
         current_contact_id = None
         incoming_messages = []
         outgoing_messages = []
         current_messages = []
         current_direction = None
-        df = df.sort_values(by=['Contact ID', 'Date & Time']).reset_index(drop=True)
+
+        # Data is already sorted, so we can iterate directly
         for _, row in df.iterrows():
             contact_id = row['Contact ID']
             message_type = row['Message Type']
+            
+            # When the contact ID changes, finalize and save the current conversation
             if contact_id != current_contact_id:
                 if current_messages:
                     if current_direction == 'incoming':
                         incoming_messages.extend(current_messages)
                     else:
                         outgoing_messages.extend(current_messages)
+                
                     if incoming_messages or outgoing_messages:
                         paired_rows.append({
                             'Chat ID': row['Chat ID'],
@@ -84,23 +89,26 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                             'incoming_texts': [msg['text'] for msg in incoming_messages],
                             'outgoing_texts': [msg['text'] for msg in outgoing_messages],
                         })
+                
+                # Reset for the new contact ID
                 current_contact_id = contact_id
                 incoming_messages = []
                 outgoing_messages = []
                 current_messages = [row]
                 current_direction = message_type
                 continue
-            if current_direction is None:
-                current_direction = message_type
-            if message_type == current_direction:
-                current_messages.append(row)
-            else:
+
+            # If the message type changes, save the accumulated messages in the correct direction
+            if message_type != current_direction:
                 if current_direction == 'incoming':
                     incoming_messages.extend(current_messages)
                 else:
                     outgoing_messages.extend(current_messages)
+                
                 current_messages = [row]
                 current_direction = message_type
+                
+                # Pair messages if both incoming and outgoing are available
                 if incoming_messages and outgoing_messages:
                     paired_rows.append({
                         'Chat ID': row['Chat ID'],
@@ -114,11 +122,17 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                     })
                     incoming_messages = []
                     outgoing_messages = []
+            else:
+                # Continue collecting messages of the same type
+                current_messages.append(row)
+
+        # Finalize the last contact ID messages
         if current_messages:
             if current_direction == 'incoming':
                 incoming_messages.extend(current_messages)
             else:
                 outgoing_messages.extend(current_messages)
+
         if incoming_messages or outgoing_messages:
             paired_rows.append({
                 'Chat ID': row['Chat ID'],
@@ -130,6 +144,8 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 'incoming_texts': [msg['text'] for msg in incoming_messages],
                 'outgoing_texts': [msg['text'] for msg in outgoing_messages],
             })
+
+        # Convert paired rows to a DataFrame and ensure column order
         if paired_rows:
             paired_df = pd.DataFrame(paired_rows)
             desired_order = [
@@ -194,10 +210,9 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     try:
         output = ""
-        previous_chat_id = None
         previous_contact_id = None
 
-        for index, row in df.iterrows():
+        for _, row in df.iterrows():
             chat_id = row.get('Chat ID', 'N/A')
             contact_id = row.get('Contact ID', 'N/A')
             incoming_texts = row.get('incoming_texts', '[]')
@@ -215,24 +230,26 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
                 except (ValueError, SyntaxError):
                     outgoing_texts = []  # Fallback if conversion fails
 
-            # Only show Chat ID and Contact ID if they change
-            if chat_id != previous_chat_id or contact_id != previous_contact_id:
-                if previous_chat_id is not None:
-                    output += "-" * 70 + "\n"  # Separator between different chats
+            # Display Chat ID and Contact ID once at the beginning of each new contact
+            if contact_id != previous_contact_id:
+                if previous_contact_id is not None:
+                    output += "-" * 70 + "\n"  # Separator between different contacts
+                
                 output += f"Chat ID: {chat_id}\nContact ID: {contact_id}\n"
-                previous_chat_id, previous_contact_id = chat_id, contact_id
+                previous_contact_id = contact_id
 
-            # Add messages
-            output += "Incoming Messages:\n"
-            output += "".join(f"- '{msg.strip()}'\n" for msg in incoming_texts if isinstance(msg, str))
-            output += "Outgoing Messages:\n"
-            output += "".join(f"- \"{msg.strip()}\"\n" for msg in outgoing_texts if isinstance(msg, str))
+            # Add messages under their respective labels
+            if incoming_texts:
+                output += "Incoming Messages:\n"
+                output += "".join(f"- '{msg.strip()}'\n" for msg in incoming_texts if isinstance(msg, str))
+            if outgoing_texts:
+                output += "Outgoing Messages:\n"
+                output += "".join(f"- \"{msg.strip()}\"\n" for msg in outgoing_texts if isinstance(msg, str))
             output += "\n"
         
         return output, "Data made readable successfully!"
     except Exception as e:
         return None, f"Error making data readable: {str(e)}"
-    
     
 def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     try:

@@ -111,7 +111,6 @@ def preprocess_task(self, s3_input_key: str) -> dict:
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
-
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
 def pair_messages_task(self, s3_input_key: str) -> dict:
     try:
@@ -122,30 +121,44 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
 
         download_file_from_s3(s3_input_key, local_input_path)
 
+        # Read data based on file type
         if s3_input_key.endswith('.csv'):
             df = pd.read_csv(local_input_path)
-        elif s3_input_key.endswith(('.xlsx', '.xls', '.parquet')):
+        elif s3_input_key.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(local_input_path)
+        elif s3_input_key.endswith('.parquet'):
+            df = pd.read_parquet(local_input_path)
         else:
-            raise ValueError("Unsupported file format for pairing messages. Only CSV and Excel files are supported.")
+            raise ValueError("Unsupported file format for pairing messages. Only CSV, Excel, and Parquet files are supported.")
 
+        # Optimize dataframe for performance
         df = optimize_dataframe(df)
+        
+        # Pair messages using the updated function
         paired_df, message = pair_messages(df)
         if paired_df is None:
             raise ValueError(message)
 
+        # Ensure all message lists contain strings only
         paired_df['incoming_texts'] = paired_df['incoming_texts'].apply(
             lambda msgs: [msg if isinstance(msg, str) else ''.join(msg) for msg in msgs]
         )
         paired_df['outgoing_texts'] = paired_df['outgoing_texts'].apply(
             lambda msgs: [msg if isinstance(msg, str) else ''.join(msg) for msg in msgs]
         )
+
+        # Optimize paired DataFrame before saving
         paired_df = optimize_dataframe(paired_df)
+        
+        # Save the paired messages locally and upload to S3
         paired_df.to_csv(local_paired_path, index=False)
         upload_file_to_s3(local_paired_path, paired_s3_key)
 
+        # Clean up local files
         remove_local_file(local_input_path)
         remove_local_file(local_paired_path)
+        
+        # Free memory
         del df, paired_df
         gc.collect()
 
