@@ -170,31 +170,40 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     
 cs_agents_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
 
-def parse_sender_ids(sender_ids_str):
-    """Helper function to parse outgoing_sender_ids string into a list."""
+
+def parse_sender_ids(sender_ids_str: str) -> List[int]:
+    """Helper function to parse outgoing_sender_ids string into a flat list of integers."""
     try:
-        return ast.literal_eval(sender_ids_str)
+        parsed = ast.literal_eval(sender_ids_str)
+        if not isinstance(parsed, list):
+            return []
+        
+        flat_list = []
+        for item in parsed:
+            if isinstance(item, list):
+                # Flatten nested lists
+                for sub_item in item:
+                    if isinstance(sub_item, (int, float)) and not math.isnan(sub_item):
+                        flat_list.append(int(sub_item))
+            elif isinstance(item, (int, float)) and not math.isnan(item):
+                flat_list.append(int(item))
+            # Ignore non-numeric and nan values
+        return flat_list
     except (ValueError, SyntaxError):
         return []
-
-def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    
+    
+def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits the DataFrame into CS chats by including only chats where outgoing_sender_ids
     contain any CS agent IDs.
-
-    Parameters:
-        df (pd.DataFrame): The input DataFrame.
-        cs_agents_ids (List[int]): List of CS agent sender IDs.
-
-    Returns:
-        Tuple[Optional[pd.DataFrame], str, bool]: The CS DataFrame, a message, and a success flag.
     """
     try:
         # Check for the required column
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
 
-        # Parse outgoing_sender_ids to lists
+        # Parse outgoing_sender_ids to lists of ints
         df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
 
         # Filter rows where any sender ID in parsed_sender_ids is in cs_agents_ids
@@ -210,36 +219,26 @@ def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.Da
 
     except Exception as e:
         return None, f"Error in cs_split: {str(e)}", False
-
-
-def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
     """
     Splits the DataFrame into sales chats by excluding chats where outgoing_sender_ids
     contain any CS agent IDs.
-
-    Parameters:
-        df (pd.DataFrame): The input DataFrame.
-        cs_agents_ids (List[int]): List of CS agent sender IDs.
-
-    Returns:
-        Tuple[Optional[pd.DataFrame], str, bool]: The sales DataFrame, a message, and a success flag.
     """
     try:
-        # Check for the required column
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
 
-        # Parse outgoing_sender_ids to lists
+        # Parse outgoing_sender_ids to lists of ints
         df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
 
-        # Count rows with missing or empty parsed_sender_ids
+        # Track rows with missing sender IDs
         missing_sender_id_count = df['parsed_sender_ids'].apply(lambda x: len(x) == 0).sum()
 
         # Filter out rows where any sender ID in parsed_sender_ids is in cs_agents_ids
         sales_df = df[~df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
 
-        # Exclude rows with empty parsed_sender_ids
-        sales_df = sales_df[df['parsed_sender_ids'].apply(lambda x: len(x) > 0)]
+        # Exclude rows with empty parsed_sender_ids from sales_df directly
+        sales_df = sales_df[sales_df['parsed_sender_ids'].apply(lambda x: len(x) > 0)]
 
         if sales_df.empty:
             message = f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id." if missing_sender_id_count > 0 else "No Sales chats found."
@@ -254,7 +253,6 @@ def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd
 
     except Exception as e:
         return None, f"Error in sales_split: {str(e)}", False
-    
 
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
