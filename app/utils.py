@@ -2,8 +2,9 @@ import pandas as pd
 import json
 from typing import Tuple, Optional, List, Dict
 import ast 
+import math 
+import numpy as np 
 
-import math
 def extract_text(content: str) -> str:
     try:
         message_data = json.loads(content)
@@ -167,135 +168,56 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-    
-    
-cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
 
-def parse_sender_ids(sender_ids_str: str) -> List[int]:
-    """
-    Parses the outgoing_sender_ids string into a flat list of integers.
-    - Converts floats to integers.
-    - Recursively flattens any nested lists.
-    - Excludes non-integer and NaN values.
-    """
-    def flatten(items):
-        for item in items:
-            if isinstance(item, list):
-                yield from flatten(item)
-            elif isinstance(item, (int, float)) and not math.isnan(item):
-                yield int(item)
-            # Ignore non-numeric and NaN values
 
+def parse_column_first_element(df: pd.DataFrame, column_name: str) -> pd.Series:
+    def safe_eval_and_extract_first(x):
+        try:
+            parsed = ast.literal_eval(x) if isinstance(x, str) else x
+            return parsed[0] if isinstance(parsed, list) and len(parsed) > 0 else np.nan
+        except (ValueError, SyntaxError):
+            return np.nan  # Return NaN if parsing fails
+    
+    df[column_name] = df[column_name].apply(safe_eval_and_extract_first)
+    return df[column_name]
+
+def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     try:
-        parsed = ast.literal_eval(sender_ids_str)
-        if not isinstance(parsed, list):
-            print(f"Warning: Parsed sender_ids is not a list: {parsed}")
-            return []
-        flat_list = list(flatten(parsed))
-        print(f"Debug: Original: {sender_ids_str} => Parsed: {flat_list}")  # Debugging Statement
-        return flat_list
-    except (ValueError, SyntaxError) as e:
-        print(f"Error parsing sender_ids_str '{sender_ids_str}': {e}")  # Debugging Statement
-        return []
-
-def cs_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
-    """
-    Splits the DataFrame into CS chats by including only chats where outgoing_sender_ids
-    contain any CS agent IDs.
-    
-    Parameters:
-        df (pd.DataFrame): The input DataFrame.
-        cs_agents_ids (set): Set of CS agent sender IDs.
-    
-    Returns:
-        Tuple[Optional[pd.DataFrame], str, bool]: The CS DataFrame, a message, and a success flag.
-    """
-    try:
-        # Check for the required column
+        # Ensure 'outgoing_sender_ids' column exists
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
-
-        # Parse outgoing_sender_ids to lists of ints
-        df['parsed_sender_ids'] = df['outgoing_sender_ids'].apply(parse_sender_ids)
-
-        # Debugging: Check for any lists inside parsed_sender_ids
-        problematic_rows = df[df['parsed_sender_ids'].apply(lambda x: any(isinstance(id, list) for id in x))]
-        if not problematic_rows.empty:
-            print("Error: The following rows have lists within 'parsed_sender_ids':")
-            print(problematic_rows[['Chat ID', 'parsed_sender_ids']])
-            # Handle or remove these rows as needed
-            # For this example, we'll exclude them from cs_df
-            df = df[~df.index.isin(problematic_rows.index)]
-            print("Excluded rows with lists in 'parsed_sender_ids' from cs_split.")
-
-        # Now, proceed to filter
-        cs_df = df[df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
-
-        if cs_df.empty:
-            return None, "No CS chats found.", False
-
-        # Drop the temporary 'parsed_sender_ids' column
-        cs_df = cs_df.drop(columns=['parsed_sender_ids'])
-
-        return cs_df, "CS chats filtered successfully!", True
-
+        
+        # Parse 'outgoing_sender_ids' column to actual lists
+        parsed_senders_ids = parse_column_first_element(df, 'outgoing_sender_ids')
+        df['parsed_senders_ids'] = parsed_senders_ids
+        
+        cs_df = df[df['parsed_senders_ids'].isin(cs_agents_ids)]
+        
+        # Return filtered DataFrame and messages
+        return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
+    
     except Exception as e:
-        return None, f"Error in cs_split: {str(e)}", False
+        return None, str(e), False
+    
 
-def sales_split(df: pd.DataFrame, cs_agents_ids: set) -> Tuple[Optional[pd.DataFrame], str, bool]:
-    """
-    Splits the DataFrame into sales chats by excluding chats where outgoing_sender_ids
-    contain any CS agent IDs.
-    
-    Parameters:
-        df (pd.DataFrame): The input DataFrame.
-        cs_agents_ids (set): Set of CS agent sender IDs.
-    
-    Returns:
-        Tuple[Optional[pd.DataFrame], str, bool]: The sales DataFrame, a message, and a success flag.
-    """
+def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
     try:
-        if 'parsed_sender_ids' not in df.columns:
-            return None, "Missing required column: 'parsed_sender_ids'", False
-
-        # Track rows with missing sender IDs
-        missing_sender_id_count = df['parsed_sender_ids'].apply(lambda x: len(x) == 0).sum()
-
-        # Debugging: Check for any lists inside parsed_sender_ids
-        problematic_rows = df[df['parsed_sender_ids'].apply(lambda x: any(isinstance(id, list) for id in x))]
-        if not problematic_rows.empty:
-            print("Error: The following rows have lists within 'parsed_sender_ids':")
-            print(problematic_rows[['Chat ID', 'parsed_sender_ids']])
-            # Handle or remove these rows as needed
-            # For this example, we'll exclude them from sales_df
-            df = df[~df.index.isin(problematic_rows.index)]
-            print("Excluded rows with lists in 'parsed_sender_ids' from sales_split.")
-
-        # Filter out rows where any sender ID is in cs_agents_ids
-        sales_df = df[~df['parsed_sender_ids'].apply(lambda x: any(id in cs_agents_ids for id in x))]
-
-        # Exclude rows with empty parsed_sender_ids from sales_df directly
-        sales_df = sales_df[sales_df['parsed_sender_ids'].apply(lambda x: len(x) > 0)]
-
-        if sales_df.empty:
-            message = (
-                f"No Sales chats found. Additionally, {missing_sender_id_count} rows have no sender id."
-                if missing_sender_id_count > 0
-                else "No Sales chats found."
-            )
-            return None, message, False
-
-        message = (
-            f"Sales chats filtered successfully! {missing_sender_id_count} rows have no sender id found."
-            if missing_sender_id_count > 0
-            else "Sales chats filtered successfully!"
-        )
-
-        return sales_df, message, True
-
+        # Ensure 'outgoing_sender_ids' column exists
+        if 'outgoing_sender_ids' not in df.columns:
+            return None, "Missing required column: 'outgoing_sender_ids'", False
+        
+        # Parse 'outgoing_sender_ids' column to actual lists
+        parsed_senders_ids = parse_column_first_element(df, 'outgoing_sender_ids')
+        df['parsed_senders_ids'] = parsed_senders_ids
+        
+        cs_df = df[~df['parsed_senders_ids'].isin(cs_agents_ids)]
+        
+        # Return filtered DataFrame and messages
+        return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
+    
     except Exception as e:
-        return None, f"Error in sales_split: {str(e)}", False
-
+        return None, str(e), False
+    
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
@@ -323,7 +245,6 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
         for index, row in df.iterrows():
             chat_id = row.get('Chat ID', 'N/A')
             contact_id = row.get('Contact ID', 'N/A')
-            outgoing_sender_ids = row.get('outgoing_sender_ids', '[]')
             incoming_texts = row.get('incoming_texts', '[]')
             outgoing_texts = row.get('outgoing_texts', '[]')
 
@@ -338,22 +259,6 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
                     outgoing_texts = ast.literal_eval(outgoing_texts)
                 except (ValueError, SyntaxError):
                     outgoing_texts = []  # Fallback if conversion fails
-            if isinstance(outgoing_sender_ids, str):
-                try:
-                    outgoing_sender_ids = ast.literal_eval(outgoing_sender_ids)
-                except (ValueError, SyntaxError):
-                    outgoing_sender_ids = []  # Fallback if conversion fails
-
-            # Extract first sender IDs as integers (handling floats and NaNs)
-            parsed_outgoing_sender_ids = []
-            for sender_id in outgoing_sender_ids:
-                if isinstance(sender_id, float) and not math.isnan(sender_id):
-                    parsed_outgoing_sender_ids.append(int(sender_id))
-                elif isinstance(sender_id, int):
-                    parsed_outgoing_sender_ids.append(sender_id)
-                else:
-                    # Handle non-integer and NaN sender IDs
-                    parsed_outgoing_sender_ids.append("No sender ID found")
 
             # Only show Chat ID, Contact ID if the Contact ID changes
             if contact_id != previous_contact_id:
@@ -371,32 +276,26 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
                     msg = incoming_texts[i]
                     if isinstance(msg, str):
                         msg = msg.strip()
-                        output += f"Incoming Message: '{msg}'\n"
+                        output += f"Incoming: '{msg}'\n"
                     else:
-                        output += "Incoming Message: 'Invalid message format'\n"
+                        output += "Incoming: 'Invalid message format'\n"
                 else:
-                    output += "Incoming Message: 'No message'\n"
+                    output += "Incoming: 'No message'\n"
 
-                # Add Outgoing Message with Sender ID
+                # Add Outgoing Message
                 if i < len(outgoing_texts):
                     msg = outgoing_texts[i]
-                    if i < len(parsed_outgoing_sender_ids):
-                        sender_id = parsed_outgoing_sender_ids[i]
-                    else:
-                        sender_id = "No sender ID found"
-
                     if isinstance(msg, str):
                         msg = msg.strip()
-                        output += f'Outgoing Message - Sender ID: {sender_id}: "{msg}"\n\n'
+                        output += f'Outgoing: "{msg}"\n\n'
                     else:
-                        output += f'Outgoing Message - Sender ID: {sender_id}: "Invalid message format"\n\n'
+                        output += 'Outgoing: "Invalid message format"\n\n'
                 else:
-                    output += 'Outgoing Message - Sender ID: No sender ID found: "No message"\n\n'
+                    output += 'Outgoing: "No message"\n\n'
 
         return output, "Data made readable successfully!"
     except Exception as e:
         return None, f"Error making data readable: {str(e)}"
-    
 
 def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     try:
