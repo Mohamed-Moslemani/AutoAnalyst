@@ -167,7 +167,9 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-   cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
+    
+    
+cs_agents_ids = {124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356}
 
 def parse_sender_ids(sender_ids_str: str) -> List[int]:
     """
