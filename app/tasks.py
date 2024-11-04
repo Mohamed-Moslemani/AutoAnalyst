@@ -1,7 +1,7 @@
+
 import os
 import boto3
 from botocore.exceptions import ClientError
-import pandas as pd
 from celery import Celery
 from typing import Tuple, Optional
 from dotenv import load_dotenv
@@ -12,12 +12,16 @@ from app.utils import (
     sales_split,
     search_messages,
     filter_by_chat_id,
-    make_readable,
-    optimize_dataframe
+    make_readable
 )
 import gc
 import uuid
-
+import pandas as pd
+import json
+from typing import Tuple, Optional, List, Dict
+import ast 
+import math 
+import numpy as np 
 # Load environment variables
 load_dotenv()
 
@@ -94,11 +98,9 @@ def preprocess_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format. Only CSV and Excel files are supported.")
 
-        df = optimize_dataframe(df)
         df, message = preprocess_dataframe(df)
         if df is None:
-            raise ValueError("Preprocessing failed.")
-        df = optimize_dataframe(df)
+            raise ValueError(message)
         df.to_csv(local_processed_path, index=False)
         upload_file_to_s3(local_processed_path, processed_s3_key)
 
@@ -111,6 +113,7 @@ def preprocess_task(self, s3_input_key: str) -> dict:
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
+
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
 def pair_messages_task(self, s3_input_key: str) -> dict:
     try:
@@ -131,10 +134,6 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format for pairing messages. Only CSV, Excel, and Parquet files are supported.")
 
-        # Optimize dataframe for performance
-        df = optimize_dataframe(df)
-        
-        # Pair messages using the updated function
         paired_df, message = pair_messages(df)
         if paired_df is None:
             raise ValueError(message)
@@ -147,9 +146,6 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
             lambda msgs: [msg if isinstance(msg, str) else ''.join(msg) for msg in msgs]
         )
 
-        # Optimize paired DataFrame before saving
-        paired_df = optimize_dataframe(paired_df)
-        
         # Save the paired messages locally and upload to S3
         paired_df.to_csv(local_paired_path, index=False)
         upload_file_to_s3(local_paired_path, paired_s3_key)
@@ -167,7 +163,6 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
 
-cs_agents_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
 def cs_split_task(self, s3_input_key: str) -> dict:
@@ -188,11 +183,9 @@ def cs_split_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format for CS split. Only CSV, Excel, and Parquet files are supported.")
 
-        df = optimize_dataframe(df)
-        cs_df, message, success = cs_split(df, cs_agents_ids)
+        cs_df, message, success = cs_split(df)
         if not success:
             raise ValueError(message)
-        cs_df = optimize_dataframe(cs_df)
         cs_df.to_csv(local_cs_split_path, index=False)
         upload_file_to_s3(local_cs_split_path, cs_split_s3_key)
 
@@ -226,11 +219,9 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format for Sales split. Only CSV, Excel, and Parquet files are supported.")
 
-        df = optimize_dataframe(df)
-        sales_df, message, success = sales_split(df, cs_agents_ids)
+        sales_df, message, success = sales_split(df)
         if not success:
             raise ValueError(message)
-        sales_df = optimize_dataframe(sales_df)
         sales_df.to_csv(local_sales_split_path, index=False)
         upload_file_to_s3(local_sales_split_path, sales_split_s3_key)
 
@@ -244,6 +235,7 @@ def sales_split_task(self, s3_input_key: str) -> dict:
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
+
 
 @celery.task(bind=True, time_limit=600, soft_time_limit=550)
 def search_messages_task(self, s3_input_key: str, text_column: str, searched_text: str) -> dict:
@@ -262,11 +254,9 @@ def search_messages_task(self, s3_input_key: str, text_column: str, searched_tex
         else:
             raise ValueError("Unsupported file format for searching messages. Only CSV and Excel files are supported.")
 
-        df = optimize_dataframe(df)
         search_df, message = search_messages(df, text_column, searched_text)
         if search_df is None:
             raise ValueError(message)
-        search_df = optimize_dataframe(search_df)
         search_df.to_csv(local_search_messages_path, index=False)
         upload_file_to_s3(local_search_messages_path, search_messages_s3_key)
 
@@ -297,14 +287,13 @@ def filter_by_chat_id_task(self, s3_input_key: str, chat_id: str) -> dict:
         else:
             raise ValueError("Unsupported file format for filtering by Chat ID. Only CSV and Excel files are supported.")
 
-        df = optimize_dataframe(df)
         filtered_df, message, success = filter_by_chat_id(df, chat_id)
         if not success:
             raise ValueError(message)
-        filtered_df = optimize_dataframe(filtered_df)
         filtered_df.to_csv(local_filter_path, index=False)
         upload_file_to_s3(local_filter_path, filter_s3_key)
 
+        # Clean up local files and memory
         remove_local_file(local_input_path)
         remove_local_file(local_filter_path)
         del df, filtered_df
@@ -332,7 +321,6 @@ def make_readable_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format for making readable. Only CSV and Excel files are supported.")
 
-        df = optimize_dataframe(df)
         readable_text, message = make_readable(df)
         if readable_text is None:
             raise ValueError(message)
@@ -369,7 +357,6 @@ def save_to_csv_task(self, s3_input_key: str) -> dict:
         else:
             raise ValueError("Unsupported file format for saving to CSV. Only CSV and Excel files are supported.")
 
-        df = optimize_dataframe(df)
         df.to_csv(local_csv_path, index=False)
         upload_file_to_s3(local_csv_path, csv_s3_key)
 

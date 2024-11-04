@@ -168,56 +168,61 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
+    
 
-
-def parse_column_first_element(df: pd.DataFrame, column_name: str) -> pd.Series:
-    def safe_eval_and_extract_first(x):
+def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
+    def safe_eval_and_convert_to_int_list(x):
         try:
             parsed = ast.literal_eval(x) if isinstance(x, str) else x
-            return parsed[0] if isinstance(parsed, list) and len(parsed) > 0 else np.nan
+            # Check if parsed data is a list and convert to int list
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return [int(elem) if not np.isnan(elem) else np.nan for elem in parsed]
+            return []
         except (ValueError, SyntaxError):
-            return np.nan  # Return NaN if parsing fails
-    
-    df[column_name] = df[column_name].apply(safe_eval_and_extract_first)
-    return df[column_name]
+            return []  # Return an empty list if parsing fails
+        
+    # Apply parsing and converting function to ensure consistent list format
+    df[column_name] = df[column_name].apply(safe_eval_and_convert_to_int_list)
 
-def cs_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+
+def rows_with_all_elements_not_in_list(value):
+    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+    if isinstance(value, list):
+        return all(elem not in allowed_ids for elem in value)
+    return False
+
+
+def rows_with_all_elements_in_list(value):
+    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+    if isinstance(value, list):
+        return all(elem in allowed_ids for elem in value)
+    return False
+
+
+def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
     try:
-        # Ensure 'outgoing_sender_ids' column exists
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        # Parse 'outgoing_sender_ids' column to actual lists
-        parsed_senders_ids = parse_column_first_element(df, 'outgoing_sender_ids')
-        df['parsed_senders_ids'] = parsed_senders_ids
-        
-        cs_df = df[df['parsed_senders_ids'].isin(cs_agents_ids)]
-        
-        # Return filtered DataFrame and messages
+        parse_column_list(df, 'outgoing_sender_ids')
+        cs_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_in_list)]
         return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
     
     except Exception as e:
         return None, str(e), False
     
 
-def sales_split(df: pd.DataFrame, cs_agents_ids: List[int]) -> Tuple[Optional[pd.DataFrame], str, bool]:
+def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
     try:
-        # Ensure 'outgoing_sender_ids' column exists
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        # Parse 'outgoing_sender_ids' column to actual lists
-        parsed_senders_ids = parse_column_first_element(df, 'outgoing_sender_ids')
-        df['parsed_senders_ids'] = parsed_senders_ids
-        
-        cs_df = df[~df['parsed_senders_ids'].isin(cs_agents_ids)]
-        
-        # Return filtered DataFrame and messages
-        return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
+        parse_column_list(df, 'outgoing_sender_ids')        
+        sales_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
+        return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
     
     except Exception as e:
         return None, str(e), False
-    
 
 def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
     try:
@@ -296,17 +301,3 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
         return output, "Data made readable successfully!"
     except Exception as e:
         return None, f"Error making data readable: {str(e)}"
-
-def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    try:
-        for col in df.select_dtypes(include=['int', 'float']).columns:
-            df[col] = pd.to_numeric(df[col], downcast='unsigned')
-        for col in df.select_dtypes(include=['object']).columns:
-            if df[col].nunique() / len(df[col]) < 0.5:
-                df[col] = df[col].astype('category')
-                if col in ['text', 'Type', 'Sub Type']:
-                    new_categories = ['normal_text', 'template']
-                    df[col] = df[col].cat.add_categories([cat for cat in new_categories if cat not in df[col].cat.categories])
-        return df
-    except Exception:
-        return df
