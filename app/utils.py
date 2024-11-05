@@ -33,7 +33,7 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
         df = df[df['Contact ID'] != 21794581]
         df['text'] = df['Content'].apply(extract_text)
         df['Chat ID'] = (df['Contact ID'] != df['Contact ID'].shift()).cumsum()
-        df['Sender ID'].fillna(0)
+        
         cols = df.columns.tolist()
         if 'Chat ID' in cols:
             cols.remove('Chat ID')
@@ -46,6 +46,7 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
         df['text'] = df['text'].fillna('template')
         df['Type'] = df['Type'].fillna('normal_text')
         df['Sub Type'] = df['Sub Type'].fillna('normal_text')
+        df['Sender ID'] = df['Sender ID'].fillna(0)
         if 0 in df.index:
             df = df.drop(index=0).reset_index(drop=True)
         return df, "DataFrame preprocessed successfully!"
@@ -77,7 +78,7 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                     else:
                         outgoing_messages.extend(current_messages)
                 
-                    if incoming_messages or outgoing_messages:
+                    if incoming_messages or outgoing_messages: 
                         paired_rows.append({
                             'Chat ID': row['Chat ID'],
                             'Contact ID': current_contact_id,
@@ -89,7 +90,6 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                             'outgoing_texts': [msg['text'] for msg in outgoing_messages],
                         })
                 
-                # Reset for the new contact ID
                 current_contact_id = contact_id
                 incoming_messages = []
                 outgoing_messages = []
