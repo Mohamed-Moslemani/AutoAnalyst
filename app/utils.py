@@ -56,10 +56,6 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
     except Exception as e:
         return None, f"Preprocessing failed. Error: {str(e)}"
 
-import pandas as pd
-from typing import Tuple, Optional
-import ast
-
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     try:
         if df is None or df.empty:
@@ -160,11 +156,6 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
             for col in missing_cols:
                 paired_df[col] = None
             paired_df = paired_df[desired_order]
-            
-            # Convert string representations of lists into actual lists
-            for col in ['incoming_dates', 'outgoing_dates', 'incoming_sender_ids', 'outgoing_sender_ids', 'incoming_texts', 'outgoing_texts']:
-                paired_df[col] = paired_df[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
-
             return paired_df, "Messages paired successfully!"
         else:
             return None, "No pairs found."
@@ -174,7 +165,6 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-
     
 
 def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
