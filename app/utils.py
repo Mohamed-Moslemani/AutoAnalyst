@@ -239,62 +239,51 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
     filtered_df = df[df[expected_chat_id_column] == chat_id_input]
     return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
 
-def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
-    try:
-        output = ""
-        previous_contact_id = None
+def make_readable(df) -> Tuple[Optional[str], str]:
+    if df is None or df.empty:
+        return None, "No DataFrame loaded. Please upload and preprocess the file."
 
-        for index, row in df.iterrows():
-            chat_id = row.get('Chat ID', 'N/A')
-            contact_id = row.get('Contact ID', 'N/A')
-            incoming_texts = row.get('incoming_texts', '[]')
-            outgoing_texts = row.get('outgoing_texts', '[]')
+    result = ""
+    previous_contact_id = None
 
-            # Convert string representations of lists to actual lists if necessary
-            if isinstance(incoming_texts, str):
-                try:
-                    incoming_texts = ast.literal_eval(incoming_texts)
-                except (ValueError, SyntaxError):
-                    incoming_texts = []  # Fallback if conversion fails
-            if isinstance(outgoing_texts, str):
-                try:
-                    outgoing_texts = ast.literal_eval(outgoing_texts)
-                except (ValueError, SyntaxError):
-                    outgoing_texts = []  # Fallback if conversion fails
+    # Include the Chat ID at the start
+    chat_id = df['Chat ID'].iloc[0] if 'Chat ID' in df.columns else 'N/A'
+    result += f"Chat ID: {chat_id}\n\n"
 
-            # Only show Chat ID, Contact ID if the Contact ID changes
-            if contact_id != previous_contact_id:
-                if previous_contact_id is not None:
-                    output += "-" * 70 + "\n"  # Separator only if the contact ID changes
-                output += f"Chat ID: {chat_id}\nContact ID: {contact_id}\n\n"
-                previous_contact_id = contact_id
+    for _, row in df.iterrows():
+        contact_id = row.get('Contact ID', 'N/A')
+        incoming_texts = row.get('incoming_texts', '[]')
+        outgoing_texts = row.get('outgoing_texts', '[]')
 
-            # Determine the number of messages to iterate through
-            max_messages = max(len(incoming_texts), len(outgoing_texts))
+        # Convert string representations of lists to actual lists if necessary
+        if isinstance(incoming_texts, str):
+            try:
+                incoming_texts = ast.literal_eval(incoming_texts)
+            except (ValueError, SyntaxError):
+                incoming_texts = []  # Fallback if conversion fails
+        if isinstance(outgoing_texts, str):
+            try:
+                outgoing_texts = ast.literal_eval(outgoing_texts)
+            except (ValueError, SyntaxError):
+                outgoing_texts = []  # Fallback if conversion fails
 
-            for i in range(max_messages):
-                # Add Incoming Message
-                if i < len(incoming_texts):
-                    msg = incoming_texts[i]
-                    if isinstance(msg, str):
-                        msg = msg.strip()
-                        output += f"Incoming: '{msg}'\n"
-                    else:
-                        output += "Incoming: 'Invalid message format'\n"
-                else:
-                    output += "Incoming: 'No message'\n"
+        # Add a separator when the Contact ID changes
+        if contact_id != previous_contact_id and previous_contact_id is not None:
+            result += "-" * 70 + "\n"
+        if contact_id != previous_contact_id:
+            result += f"Contact ID: {contact_id}\n\n"
+            previous_contact_id = contact_id
 
-                # Add Outgoing Message
-                if i < len(outgoing_texts):
-                    msg = outgoing_texts[i]
-                    if isinstance(msg, str):
-                        msg = msg.strip()
-                        output += f'Outgoing: "{msg}"\n\n'
-                    else:
-                        output += 'Outgoing: "Invalid message format"\n\n'
-                else:
-                    output += 'Outgoing: "No message"\n\n'
+        # Append incoming and outgoing messages in the "Client" and "Agent" format
+        for msg in incoming_texts:
+            result += f"Client: {msg}\n"
+        for msg in outgoing_texts:
+            result += f"Agent: {msg}\n"
+        result += "\n"
 
-        return output, "Data made readable successfully!"
-    except Exception as e:
-        return None, f"Error making data readable: {str(e)}"
+    # Save the result to a file and return the content
+    save_file_name = "chat_transcript.txt"  # Modify file name as needed
+    with open(save_file_name, 'w', encoding='utf-8') as file:
+        file.write(result)
+
+    return result, f"Data saved to {save_file_name}"
