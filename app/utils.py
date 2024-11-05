@@ -33,6 +33,7 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
         df = df[df['Contact ID'] != 21794581]
         df['text'] = df['Content'].apply(extract_text)
         df['Chat ID'] = (df['Contact ID'] != df['Contact ID'].shift()).cumsum()
+        df['Sender ID'].fillna(0)
         cols = df.columns.tolist()
         if 'Chat ID' in cols:
             cols.remove('Chat ID')
@@ -66,13 +67,9 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         outgoing_messages = []
         current_messages = []
         current_direction = None
-
-        # Data is already sorted, so we can iterate directly
         for _, row in df.iterrows():
             contact_id = row['Contact ID']
             message_type = row['Message Type']
-            
-            # When the contact ID changes, finalize and save the current conversation
             if contact_id != current_contact_id:
                 if current_messages:
                     if current_direction == 'incoming':
