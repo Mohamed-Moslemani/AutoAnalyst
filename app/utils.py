@@ -167,19 +167,18 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
         return None, f"An unexpected error occurred: {str(e)}"
     
 
-def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
+def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
     def safe_eval_and_convert_to_int_list(x):
         try:
             parsed = ast.literal_eval(x) if isinstance(x, str) else x
-            # Check if parsed data is a list and convert to int list
             if isinstance(parsed, list) and len(parsed) > 0:
                 return [int(elem) if not np.isnan(elem) else np.nan for elem in parsed]
             return []
         except (ValueError, SyntaxError):
-            return []  # Return an empty list if parsing fails
+            return []  
         
-    # Apply parsing and converting function to ensure consistent list format
     df[column_name] = df[column_name].apply(safe_eval_and_convert_to_int_list)
+    return df
 
 
 def rows_with_all_elements_not_in_list(value):
@@ -201,8 +200,8 @@ def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        parse_column_list(df, 'outgoing_sender_ids')
-        cs_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_in_list)]
+        cs_df = parse_column_list(df, 'outgoing_sender_ids')
+        cs_df = cs_df[cs_df['outgoing_sender_ids'].apply(rows_with_all_elements_in_list)]
         return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
     
     except Exception as e:
@@ -214,8 +213,8 @@ def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        parse_column_list(df, 'outgoing_sender_ids')        
-        sales_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
+        sales_df = parse_column_list(df, 'outgoing_sender_ids')        
+        sales_df = sales_df[sales_df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
         return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
     
     except Exception as e:
@@ -282,7 +281,7 @@ def make_readable(df) -> Tuple[Optional[str], str]:
         result += "\n"
 
     # Save the result to a file and return the content
-    save_file_name = "chat_transcript.txt"  # Modify file name as needed
+    save_file_name = "chat_transcript.txt"
     with open(save_file_name, 'w', encoding='utf-8') as file:
         file.write(result)
 
