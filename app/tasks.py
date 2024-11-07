@@ -5,15 +5,8 @@ from botocore.exceptions import ClientError
 from celery import Celery
 from typing import Tuple, Optional
 from dotenv import load_dotenv
-from app.utils import (
-    preprocess_dataframe,
-    pair_messages,
-    cs_split,
-    sales_split,
-    search_messages,
-    filter_by_chat_id,
-    make_readable
-)
+from app.utils import (cs_split, filter_by_chat_id, make_readable, pair_messages,
+    preprocess_dataframe, sales_split, search_messages)
 import gc
 import uuid
 import pandas as pd
@@ -139,10 +132,10 @@ def pair_messages_task(self, s3_input_key: str) -> dict:
             raise ValueError(message)
 
         # Ensure all message lists contain strings only
-        paired_df['incoming_texts'] = paired_df['incoming_texts'].apply(
+        paired_df['incoming_messages'] = paired_df['incoming_messages'].apply(
             lambda msgs: [msg if isinstance(msg, str) else ''.join(msg) for msg in msgs]
         )
-        paired_df['outgoing_texts'] = paired_df['outgoing_texts'].apply(
+        paired_df['outgoing_messages'] = paired_df['outgoing_messages'].apply(
             lambda msgs: [msg if isinstance(msg, str) else ''.join(msg) for msg in msgs]
         )
 

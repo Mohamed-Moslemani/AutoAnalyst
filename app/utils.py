@@ -57,141 +57,111 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
     except Exception as e:
         return None, f"Preprocessing failed. Error: {str(e)}"
 
-def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
+def pair_messages(df):
+    # Check if required columns are present
+    required_columns = {'Contact ID', 'Date & Time', 'Message Type', 'text', 'Sender ID'}
+    missing_columns = required_columns - set(df.columns)
+    if missing_columns:
+        raise ValueError(f"DataFrame is missing required columns: {', '.join(missing_columns)}")
+
+    df = df.sort_values(by=['Contact ID', 'Date & Time']).reset_index(drop=True)
+    
+    paired_data = []
+    current_incoming = []
+    current_outgoing = []
+    outgoing_sender_ids = []  # To store outgoing sender IDs
+    current_contact_id = None
+
     try:
-        if df is None or df.empty:
-            raise ValueError("No DataFrame loaded. Please upload and preprocess the file.")
-        
-        paired_rows = []
-        current_contact_id = None
-        incoming_messages = []
-        outgoing_messages = []
-        current_messages = []
-        current_direction = None
-        for _, row in df.iterrows():
-            contact_id = row['Contact ID']
-            message_type = row['Message Type']
-            if contact_id != current_contact_id:
-                if current_messages:
-                    if current_direction == 'incoming':
-                        incoming_messages.extend(current_messages)
-                    else:
-                        outgoing_messages.extend(current_messages)
-                
-                    if incoming_messages or outgoing_messages: 
-                        paired_rows.append({
-                            'Chat ID': row['Chat ID'],
-                            'Contact ID': current_contact_id,
-                            'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
-                            'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
-                            'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
-                            'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
-                            'incoming_texts': [msg['text'] for msg in incoming_messages],
-                            'outgoing_texts': [msg['text'] for msg in outgoing_messages],
-                        })
-                
-                current_contact_id = contact_id
-                incoming_messages = []
-                outgoing_messages = []
-                current_messages = [row]
-                current_direction = message_type
-                continue
-
-            # If the message type changes, save the accumulated messages in the correct direction
-            if message_type != current_direction:
-                if current_direction == 'incoming':
-                    incoming_messages.extend(current_messages)
-                else:
-                    outgoing_messages.extend(current_messages)
-                
-                current_messages = [row]
-                current_direction = message_type
-                
-                # Pair messages if both incoming and outgoing are available
-                if incoming_messages and outgoing_messages:
-                    paired_rows.append({
-                        'Chat ID': row['Chat ID'],
-                        'Contact ID': contact_id,
-                        'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
-                        'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
-                        'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
-                        'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
-                        'incoming_texts': [msg['text'] for msg in incoming_messages],
-                        'outgoing_texts': [msg['text'] for msg in outgoing_messages],
+        for index, row in df.iterrows():
+            # Check if Contact ID has changed
+            if row['Contact ID'] != current_contact_id:
+                if current_incoming or current_outgoing:
+                    paired_data.append({
+                        'Contact ID': current_contact_id,
+                        'incoming_messages': current_incoming,
+                        'outgoing_messages': current_outgoing,
+                        'outgoing_sender_ids': outgoing_sender_ids
                     })
-                    incoming_messages = []
-                    outgoing_messages = []
-            else:
-                # Continue collecting messages of the same type
-                current_messages.append(row)
+                # Reset for the new Contact ID
+                current_contact_id = row['Contact ID']
+                current_incoming = []
+                current_outgoing = []
+                outgoing_sender_ids = []
 
-        # Finalize the last contact ID messages
-        if current_messages:
-            if current_direction == 'incoming':
-                incoming_messages.extend(current_messages)
+            # Accumulate incoming and outgoing messages
+            if row['Message Type'] == 'incoming':
+                if current_outgoing:  # Finalize pairing if there's a pending outgoing group
+                    paired_data.append({
+                        'Contact ID': current_contact_id,
+                        'incoming_messages': current_incoming,
+                        'outgoing_messages': current_outgoing,
+                        'outgoing_sender_ids': outgoing_sender_ids
+                    })
+                    current_incoming = []
+                    current_outgoing = []
+                    outgoing_sender_ids = []
+                current_incoming.append(row['text'])
+            elif row['Message Type'] == 'outgoing':
+                if current_incoming:  # Collect outgoing messages and Sender ID for current incoming messages
+                    current_outgoing.append(row['text'])
+                    outgoing_sender_ids.append(int(row['Sender ID']))  # Convert Sender ID to integer
             else:
-                outgoing_messages.extend(current_messages)
+                raise ValueError(f"Unexpected Message Type at index {index}: {row['Message Type']}")
 
-        if incoming_messages or outgoing_messages:
-            paired_rows.append({
-                'Chat ID': row['Chat ID'],
+        # Add the last pair if exists
+        if current_incoming or current_outgoing:
+            paired_data.append({
                 'Contact ID': current_contact_id,
-                'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
-                'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
-                'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
-                'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
-                'incoming_texts': [msg['text'] for msg in incoming_messages],
-                'outgoing_texts': [msg['text'] for msg in outgoing_messages],
+                'incoming_messages': current_incoming,
+                'outgoing_messages': current_outgoing,
+                'outgoing_sender_ids': outgoing_sender_ids
             })
 
-        # Convert paired rows to a DataFrame and ensure column order
-        if paired_rows:
-            paired_df = pd.DataFrame(paired_rows)
-            desired_order = [
-                'Chat ID', 'Contact ID', 'incoming_dates', 'outgoing_dates',
-                'incoming_sender_ids', 'outgoing_sender_ids',
-                'outgoing_texts', 'incoming_texts'
-            ]
-            missing_cols = set(desired_order) - set(paired_df.columns)
-            for col in missing_cols:
-                paired_df[col] = None
-            paired_df = paired_df[desired_order]
-            return paired_df, "Messages paired successfully!"
-        else:
-            return None, "No pairs found."
-    except ValueError as ve:
-        return None, str(ve)
-    except KeyError as ke:
-        return None, f"Missing column: {str(ke)}"
     except Exception as e:
-        return None, f"An unexpected error occurred: {str(e)}"
-    
+        print(f"An error occurred during message pairing: {e}")
+        raise
 
-def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    # Convert the paired data to a DataFrame
+    paired_df = pd.DataFrame(paired_data)
+    return paired_df, "Messages paired successfully!"
+
+
+def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
     def safe_eval_and_convert_to_int_list(x):
         try:
             parsed = ast.literal_eval(x) if isinstance(x, str) else x
-            if isinstance(parsed, list) and len(parsed) > 0:
-                return [int(elem) if not np.isnan(elem) else np.nan for elem in parsed]
+            if isinstance(parsed, list) and parsed:
+                result = []
+                for elem in parsed:
+                    try:
+                        if elem is not None and not (isinstance(elem, float) and np.isnan(elem)):
+                            result.append(int(elem))
+                        else:
+                            result.append(np.nan)
+                    except (ValueError, TypeError):
+                        result.append(np.nan)
+                return result
             return []
-        except (ValueError, SyntaxError):
-            return []  
+        except (ValueError, SyntaxError, TypeError):
+            return []
+
         
     df[column_name] = df[column_name].apply(safe_eval_and_convert_to_int_list)
+    print(f"Data types after parsing: {df[column_name].apply(type)}")
+
     return df
-
-
-def rows_with_all_elements_not_in_list(value):
-    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
-    if isinstance(value, list):
-        return all(elem not in allowed_ids for elem in value)
-    return False
-
 
 def rows_with_all_elements_in_list(value):
     allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
-    if isinstance(value, list):
+    if isinstance(value, list) and value:
         return all(elem in allowed_ids for elem in value)
+    return False
+
+def rows_with_all_elements_not_in_list(value):
+    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+    if isinstance(value, list) and value:
+        return all(elem not in allowed_ids for elem in value)
     return False
 
 
@@ -214,7 +184,7 @@ def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
         sales_df = parse_column_list(df, 'outgoing_sender_ids')        
-        sales_df = sales_df[sales_df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
+        sales_df = sales_df[df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
         return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
     
     except Exception as e:
