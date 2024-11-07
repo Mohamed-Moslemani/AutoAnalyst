@@ -56,10 +56,11 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"Preprocessing failed. Error: {str(e)}"
+import pandas as pd
 
 def pair_messages(df):
     # Check if required columns are present
-    required_columns = {'Contact ID', 'Date & Time', 'Message Type', 'text', 'Sender ID'}
+    required_columns = {'Contact ID', 'Date & Time', 'Message Type', 'text', 'Sender ID', 'Chat ID'}
     missing_columns = required_columns - set(df.columns)
     if missing_columns:
         raise ValueError(f"DataFrame is missing required columns: {', '.join(missing_columns)}")
@@ -70,21 +71,24 @@ def pair_messages(df):
     current_incoming = []
     current_outgoing = []
     outgoing_sender_ids = []  # To store outgoing sender IDs
+    current_chat_id = None
     current_contact_id = None
 
     try:
         for index, row in df.iterrows():
-            # Check if Contact ID has changed
-            if row['Contact ID'] != current_contact_id:
+            # Check if Contact ID or Chat ID has changed
+            if row['Contact ID'] != current_contact_id or row['Chat ID'] != current_chat_id:
                 if current_incoming or current_outgoing:
                     paired_data.append({
                         'Contact ID': current_contact_id,
+                        'Chat ID': current_chat_id,
                         'incoming_messages': current_incoming,
                         'outgoing_messages': current_outgoing,
                         'outgoing_sender_ids': outgoing_sender_ids
                     })
-                # Reset for the new Contact ID
+                # Reset for the new Contact ID or Chat ID
                 current_contact_id = row['Contact ID']
+                current_chat_id = row['Chat ID']
                 current_incoming = []
                 current_outgoing = []
                 outgoing_sender_ids = []
@@ -94,6 +98,7 @@ def pair_messages(df):
                 if current_outgoing:  # Finalize pairing if there's a pending outgoing group
                     paired_data.append({
                         'Contact ID': current_contact_id,
+                        'Chat ID': current_chat_id,
                         'incoming_messages': current_incoming,
                         'outgoing_messages': current_outgoing,
                         'outgoing_sender_ids': outgoing_sender_ids
@@ -113,6 +118,7 @@ def pair_messages(df):
         if current_incoming or current_outgoing:
             paired_data.append({
                 'Contact ID': current_contact_id,
+                'Chat ID': current_chat_id,
                 'incoming_messages': current_incoming,
                 'outgoing_messages': current_outgoing,
                 'outgoing_sender_ids': outgoing_sender_ids
@@ -130,11 +136,13 @@ def pair_messages(df):
 def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
     def safe_eval_and_convert_to_int_list(x):
         try:
+            # Safely evaluate the string representation of a list
             parsed = ast.literal_eval(x) if isinstance(x, str) else x
             if isinstance(parsed, list) and parsed:
                 result = []
                 for elem in parsed:
                     try:
+                        # Convert elements to int if possible, otherwise use NaN
                         if elem is not None and not (isinstance(elem, float) and np.isnan(elem)):
                             result.append(int(elem))
                         else:
@@ -146,11 +154,8 @@ def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
         except (ValueError, SyntaxError, TypeError):
             return []
 
-        
     df[column_name] = df[column_name].apply(safe_eval_and_convert_to_int_list)
-    print(f"Data types after parsing: {df[column_name].apply(type)}")
-
-    return df
+    return df[column_name]
 
 def rows_with_all_elements_in_list(value):
     allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
@@ -166,12 +171,15 @@ def rows_with_all_elements_not_in_list(value):
 
 
 def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    
     try:
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        cs_df = parse_column_list(df, 'outgoing_sender_ids')
-        cs_df = cs_df[cs_df['outgoing_sender_ids'].apply(rows_with_all_elements_in_list)]
+        outgoing_ids = parse_column_list(df,"outgoing_sender_ids")
+        df['outgoing_parsed_ids'] = outgoing_ids
+
+        cs_df = df[df['outgoing_parsed_ids'].apply(rows_with_all_elements_in_list)]
         return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
     
     except Exception as e:
@@ -183,8 +191,10 @@ def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
         if 'outgoing_sender_ids' not in df.columns:
             return None, "Missing required column: 'outgoing_sender_ids'", False
         
-        sales_df = parse_column_list(df, 'outgoing_sender_ids')        
-        sales_df = sales_df[df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
+        outgoing_ids = parse_column_list(df,"outgoing_sender_ids")
+        df['outgoing_parsed_ids'] = outgoing_ids
+
+        sales_df = df[df['outgoing_parsed_ids'].apply(rows_with_all_elements_not_in_list)]
         return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
     
     except Exception as e:
@@ -221,8 +231,8 @@ def make_readable(df) -> Tuple[Optional[str], str]:
 
     for _, row in df.iterrows():
         contact_id = row.get('Contact ID', 'N/A')
-        incoming_texts = row.get('incoming_texts', '[]')
-        outgoing_texts = row.get('outgoing_texts', '[]')
+        incoming_texts = row.get('incoming_message', '[]')
+        outgoing_texts = row.get('outgoing_messages', '[]')
 
         # Convert string representations of lists to actual lists if necessary
         if isinstance(incoming_texts, str):
