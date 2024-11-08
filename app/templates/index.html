@@ -62,6 +62,31 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
+        /* Guidelines Section */
+        .guidelines-section {
+            text-align: center;
+        }
+        .guidelines-section h2 {
+            font-size: 2em;
+            color: #FCA311;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+        .guidelines-section a {
+            display: inline-block;
+            background-color: #FCA311;
+            color: #14213D;
+            padding: 15px 30px;
+            font-size: 1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+        }
+        .guidelines-section a:hover {
+            background-color: #E59400;
+        }
+
         /* Upload Section */
         .upload-section {
             text-align: center;
@@ -216,7 +241,8 @@
                 font-size: 2.5em;
             }
             .upload-section h2,
-            .task-section h2 {
+            .task-section h2,
+            .guidelines-section h2 {
                 font-size: 1.8em;
             }
             .task-buttons {
@@ -233,6 +259,14 @@
             <img src="../static/800Logo.png" alt="Company Logo">
             <h1>Sales-CS Chats Analyzer</h1>
             <p>Analyze and process your chat data seamlessly.</p>
+        </div>
+
+        <!-- Guidelines Card -->
+        <div class="card">
+            <div class="guidelines-section">
+                <h2>Guidelines</h2>
+                <a href="../static/Guidelines.pdf" download>Download Guidelines PDF</a>
+            </div>
         </div>
 
         <!-- File Upload Card -->
@@ -757,52 +791,51 @@
         /**
          * Initiates the Filter by Chat ID task.
          */
-         async function filterByChatId() {
-    const filePath = document.getElementById('currentFilePath').value;
-    const chatId = document.getElementById('filterChatId').value.trim();
+        async function filterByChatId() {
+            const filePath = document.getElementById('currentFilePath').value;
+            const chatId = document.getElementById('filterChatId').value.trim();
 
-    if (!filePath || !chatId) {
-        alert("Please upload a file and enter a Chat ID.");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file_key", filePath); // Updated key
-    formData.append("chat_id", chatId);     // Ensure it's a string
-
-    const statusDiv = document.getElementById('status');
-    statusDiv.style.display = 'block';
-    statusDiv.innerHTML += "<br>Filtering by Chat ID...";
-    disableActionButtons();
-
-    try {
-        const response = await fetch('/filter_by_chat_id/', {
-            method: 'POST',
-            body: formData
-        });
-        const data = await response.json();
-        if (response.ok && data.task_id) {
-            statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
-            checkStatus(data.task_id, "filter_by_chat_id_task"); // Updated operation name
-        } else {
-            // Enhanced error handling
-            if (data.detail) {
-                data.detail.forEach(error => {
-                    statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
-                });
-            } else {
-                statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+            if (!filePath || !chatId) {
+                alert("Please upload a file and enter a Chat ID.");
+                return;
             }
-            console.error(`Filter by Chat ID Error:`, data);
-            enableActionButtons();
-        }
-    } catch (error) {
-        statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
-        console.error(`Filter by Chat ID Fetch Error:`, error);
-        enableActionButtons();
-    }
-}
 
+            const formData = new FormData();
+            formData.append("file_key", filePath); // Updated key
+            formData.append("chat_id", chatId);     // Ensure it's a string
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML += "<br>Filtering by Chat ID...";
+            disableActionButtons();
+
+            try {
+                const response = await fetch('/filter_by_chat_id/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.task_id) {
+                    statusDiv.innerHTML += `<br>Filter Task ID: ${data.task_id}<br>Processing...`;
+                    checkStatus(data.task_id, "filter_by_chat_id_task"); // Updated operation name
+                } else {
+                    // Enhanced error handling
+                    if (data.detail) {
+                        data.detail.forEach(error => {
+                            statusDiv.innerHTML += `<br>Error: ${error.loc.join(' -> ')} - ${error.msg}`;
+                        });
+                    } else {
+                        statusDiv.innerHTML += `<br>Error: ${data.error || JSON.stringify(data) || 'Unknown error.'}`;
+                    }
+                    console.error(`Filter by Chat ID Error:`, data);
+                    enableActionButtons();
+                }
+            } catch (error) {
+                statusDiv.innerHTML += `<br>Error: ${error.message || error}`;
+                console.error(`Filter by Chat ID Fetch Error:`, error);
+                enableActionButtons();
+            }
+        }
 
         /**
          * Optionally, you can implement a function to reset the workflow.
