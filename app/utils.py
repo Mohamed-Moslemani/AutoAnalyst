@@ -238,13 +238,11 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
     chat_id_input = chat_id_input.strip()
     filtered_df = df[df[expected_chat_id_column] == chat_id_input]
     return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
-
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     if df is None or df.empty:
         return None, "No DataFrame loaded. Please upload and preprocess the file."
 
     result = ""
-    previous_chat_id = None
     previous_contact_id = None
 
     for _, row in df.iterrows():
@@ -265,15 +263,11 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
             except (ValueError, SyntaxError):
                 outgoing_texts = []  # Fallback if conversion fails
 
-        # Add Chat ID header when it changes
-        if chat_id != previous_chat_id:
-            if previous_chat_id is not None:
+        # Add Chat ID and Contact ID headers when the contact changes
+        if contact_id != previous_contact_id:
+            if previous_contact_id is not None:
                 result += "-" * 70 + "\n"
             result += f"Chat ID: {chat_id}\n"
-            previous_chat_id = chat_id
-
-        # Add Contact ID header when it changes or when Chat ID changes
-        if contact_id != previous_contact_id:
             result += f"Contact ID: {contact_id}\n\n"
             previous_contact_id = contact_id
 
@@ -285,7 +279,7 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
         result += "\n"
 
     # Add a separator for the final block
-    if previous_chat_id is not None:
+    if previous_contact_id is not None:
         result += "-" * 70 + "\n"
 
     # Save the result to a file and return the content
