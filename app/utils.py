@@ -239,18 +239,16 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
     filtered_df = df[df[expected_chat_id_column] == chat_id_input]
     return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
 
-def make_readable(df) -> Tuple[Optional[str], str]:
+def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     if df is None or df.empty:
         return None, "No DataFrame loaded. Please upload and preprocess the file."
 
     result = ""
+    previous_chat_id = None
     previous_contact_id = None
 
-    # Include the Chat ID at the start
-    chat_id = df['Chat ID'].iloc[0] if 'Chat ID' in df.columns else 'N/A'
-    result += f"Chat ID: {chat_id}\n\n"
-
     for _, row in df.iterrows():
+        chat_id = row.get('Chat ID', 'N/A')
         contact_id = row.get('Contact ID', 'N/A')
         incoming_texts = row.get('incoming_texts', '[]')
         outgoing_texts = row.get('outgoing_texts', '[]')
@@ -267,9 +265,14 @@ def make_readable(df) -> Tuple[Optional[str], str]:
             except (ValueError, SyntaxError):
                 outgoing_texts = []  # Fallback if conversion fails
 
-        # Add a separator when the Contact ID changes
-        if contact_id != previous_contact_id and previous_contact_id is not None:
-            result += "-" * 70 + "\n"
+        # Add Chat ID header when it changes
+        if chat_id != previous_chat_id:
+            if previous_chat_id is not None:
+                result += "-" * 70 + "\n"
+            result += f"Chat ID: {chat_id}\n"
+            previous_chat_id = chat_id
+
+        # Add Contact ID header when it changes or when Chat ID changes
         if contact_id != previous_contact_id:
             result += f"Contact ID: {contact_id}\n\n"
             previous_contact_id = contact_id
@@ -281,8 +284,12 @@ def make_readable(df) -> Tuple[Optional[str], str]:
             result += f"Agent: {msg}\n"
         result += "\n"
 
+    # Add a separator for the final block
+    if previous_chat_id is not None:
+        result += "-" * 70 + "\n"
+
     # Save the result to a file and return the content
-    save_file_name = "chat_transcript.txt"  # Modify file name as needed
+    save_file_name = "chat_transcript.txt"
     with open(save_file_name, 'w', encoding='utf-8') as file:
         file.write(result)
 
