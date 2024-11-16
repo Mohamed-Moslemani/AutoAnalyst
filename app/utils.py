@@ -239,52 +239,51 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
     filtered_df = df[df[expected_chat_id_column] == chat_id_input]
     return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
 
+import ast
+import pandas as pd
+from typing import Tuple, Optional
 
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     if df is None or df.empty:
         return None, "No DataFrame loaded. Please upload and preprocess the file."
 
     result = ""
-    previous_contact_id = None
-    previous_chat_id = None
 
-    for _, row in df.iterrows():
-        chat_id = row.get('Chat ID', 'N/A')
-        contact_id = row.get('Contact ID', 'N/A')
-        incoming_texts = row.get('incoming_texts', '[]')
-        outgoing_texts = row.get('outgoing_texts', '[]')
+    # Group the dataframe by 'Contact ID' and 'Chat ID'
+    grouped = df.groupby(['Contact ID', 'Chat ID'])
 
-        # Convert string representations of lists to actual lists if necessary
-        if isinstance(incoming_texts, str):
-            try:
-                incoming_texts = ast.literal_eval(incoming_texts)
-            except (ValueError, SyntaxError):
-                incoming_texts = []  # Fallback if conversion fails
-        if isinstance(outgoing_texts, str):
-            try:
-                outgoing_texts = ast.literal_eval(outgoing_texts)
-            except (ValueError, SyntaxError):
-                outgoing_texts = []  # Fallback if conversion fails
+    for (contact_id, chat_id), group in grouped:
+        result += f"Chat ID: {chat_id}\n"
+        result += f"Contact ID: {contact_id}\n\n"
 
-        # Add headers when the Contact ID or Chat ID changes
-        if contact_id != previous_contact_id or chat_id != previous_chat_id:
-            if previous_contact_id is not None:
-                result += "-" * 70 + "\n"  # Separator for previous block
-            result += f"Chat ID: {chat_id}\n"
-            result += f"Contact ID: {contact_id}\n\n"
-            previous_contact_id = contact_id
-            previous_chat_id = chat_id
+        incoming_texts = []
+        outgoing_texts = []
+
+        for _, row in group.iterrows():
+            row_incoming_texts = row.get('incoming_texts', '[]')
+            row_outgoing_texts = row.get('outgoing_texts', '[]')
+
+            # Convert string representations of lists to actual lists if necessary
+            if isinstance(row_incoming_texts, str):
+                try:
+                    row_incoming_texts = ast.literal_eval(row_incoming_texts)
+                except (ValueError, SyntaxError):
+                    row_incoming_texts = []  # Fallback if conversion fails
+            if isinstance(row_outgoing_texts, str):
+                try:
+                    row_outgoing_texts = ast.literal_eval(row_outgoing_texts)
+                except (ValueError, SyntaxError):
+                    row_outgoing_texts = []  # Fallback if conversion fails
+
+            incoming_texts.extend(row_incoming_texts)
+            outgoing_texts.extend(row_outgoing_texts)
 
         # Append incoming and outgoing messages in the "Client" and "Agent" format
         for msg in incoming_texts:
             result += f"Client: {msg}\n"
         for msg in outgoing_texts:
             result += f"Agent: {msg}\n"
-        result += "\n"
-
-    # Add a separator for the final block
-    if previous_contact_id is not None:
-        result += "-" * 70 + "\n"
+        result += "\n" + "-" * 70 + "\n"
 
     # Save the result to a file and return the content
     save_file_name = "chat_transcript.txt"
