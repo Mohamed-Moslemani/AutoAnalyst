@@ -253,8 +253,8 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     grouped = df.groupby(['Contact ID', 'Chat ID'])
 
     for (contact_id, chat_id), group in grouped:
-        result += f"Chat ID: {chat_id}\n"
         result += f"Contact ID: {contact_id}\n\n"
+        result += f"Chat ID: {chat_id}\n"
 
         incoming_texts = []
         outgoing_texts = []
