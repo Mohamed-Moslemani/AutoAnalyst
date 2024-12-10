@@ -5,16 +5,18 @@
     <title>Sales-CS Chats Analyzer</title>
     <link rel="icon" href="../static/photo.ico" type="image/x-icon">
     <style>
-        /* Base Styles */
+        /* General Styles */
         * {
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #1a1a2e;
             color: #fff;
-            margin: 0;
-            padding: 0;
+            padding: 0 10px;
+            line-height: 1.6;
         }
         a {
             color: #ff9800;
@@ -26,55 +28,67 @@
 
         /* Container */
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: auto;
-            padding: 40px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            padding: 20px;
         }
 
         /* Header */
         .header {
             text-align: center;
-            padding-bottom: 30px;
+            padding: 20px 0;
+            position: relative;
+        }
+        .header img {
+            max-width: 150px;
+            position: absolute;
+            top: 10px;
+            left: 20px;
         }
         .header h1 {
-            font-size: 3em;
+            font-size: 2.5rem;
             color: #ff9800;
-            margin-bottom: 10px;
-        }
-        .header p {
-            font-size: 1.2em;
-            color: #fff;
         }
 
-        /* Card Styles */
+        /* Guidelines Button */
+        .guidelines {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .guidelines a {
+            display: inline-block;
+            background-color: #4CC9FE;
+            color: #1a1a2e;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+        .guidelines a:hover {
+            background-color: #37AFE1;
+        }
+
+        /* Cards */
         .card {
             background: #16213e;
-            border-radius: 10px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 800px;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
         /* Upload Section */
         .upload-section {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            text-align: center;
         }
         .upload-section input[type="file"] {
-            margin-bottom: 20px;
-            color: #fff;
+            margin: 15px 0;
         }
         .upload-section button {
             background-color: #ff9800;
             color: #fff;
             border: none;
-            padding: 15px 30px;
+            padding: 12px 25px;
             font-size: 1em;
             border-radius: 5px;
             cursor: pointer;
@@ -84,25 +98,8 @@
             background-color: #e07c00;
         }
 
-        /* Task Status */
-        #status {
-            background: #0f3460;
-            border-left: 5px solid #ff9800;
-            padding: 15px;
-            margin-top: 20px;
-            border-radius: 4px;
-            font-size: 1em;
-            color: #fff;
-            width: 100%;
-            max-width: 800px;
-            white-space: pre-wrap; /* Preserve formatting */
-        }
-
-        /* Additional Operations */
-        .task-section h2 {
-            font-size: 2em;
-            color: #ff9800;
-            margin-bottom: 30px;
+        /* Task Buttons */
+        .task-section {
             text-align: center;
         }
         .task-buttons {
@@ -115,17 +112,15 @@
             background-color: #e94560;
             color: #fff;
             border: none;
-            padding: 15px 25px;
+            padding: 12px 20px;
             font-size: 1em;
             border-radius: 5px;
             cursor: pointer;
-            flex: 1 1 200px;
             transition: background 0.3s;
         }
         .task-buttons button:hover {
             background-color: #d63447;
         }
-        /* Disable button styles */
         .task-buttons button:disabled {
             background-color: #555;
             cursor: not-allowed;
@@ -133,56 +128,48 @@
 
         /* Forms */
         .form-group {
-            margin-top: 30px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 100%;
+            margin-top: 20px;
+            text-align: center;
         }
-        .form-group label {
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: #ff9800;
-            align-self: flex-start;
-        }
-        .form-group input[type="text"],
-        .form-group input[type="number"] {
-            padding: 12px;
+        .form-group input {
+            padding: 10px;
             font-size: 1em;
             border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-bottom: 15px;
-            width: 100%;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            width: 80%;
             max-width: 400px;
         }
         .form-group button {
-            background-color: #e94560;
-            color: #fff;
+            background-color: #4CC9FE;
+            color: #1a1a2e;
             border: none;
-            padding: 12px 20px;
-            font-size: 1em;
+            padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
             transition: background 0.3s;
-            margin-top: 10px;
         }
         .form-group button:hover {
-            background-color: #d63447;
+            background-color: #37AFE1;
+        }
+
+        /* Status */
+        #status {
+            background: #0f3460;
+            border-left: 5px solid #ff9800;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px auto;
+            max-width: 800px;
+            white-space: pre-wrap; /* Preserve formatting */
         }
 
         /* Footer */
         .footer {
             text-align: center;
-            padding: 20px;
-            color: #777;
+            padding: 15px;
             font-size: 0.9em;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .task-buttons {
-                flex-direction: column;
-            }
+            color: #777;
         }
     </style>
 </head>
@@ -190,10 +177,16 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
+            <img src="../static/800logo.png" alt="Logo">
             <h1>Sales-CS Chats Analyzer</h1>
         </div>
 
-        <!-- File Upload Card -->
+        <!-- Guidelines -->
+        <div class="guidelines">
+            <a href="../static/Guidelines.pdf" target="_blank">Download Guidelines</a>
+        </div>
+
+        <!-- File Upload Section -->
         <div class="card">
             <div class="upload-section">
                 <h2>Upload and Preprocess File</h2>
@@ -205,36 +198,29 @@
         <!-- Task Status -->
         <div id="status" style="display: none;"></div>
 
-        <!-- Additional Operations Card -->
+        <!-- Additional Operations -->
         <div class="card task-section">
             <h2>Additional Operations</h2>
-            <form id="additionalOpsForm">
-                <input type="hidden" id="currentFilePath" name="file_key"> <!-- Updated name -->
+            <div class="task-buttons">
+                <button type="button" onclick="pairMessages()" id="pairMessagesBtn" disabled>Pair Messages</button>
+                <button type="button" onclick="salesSplit()" id="salesSplitBtn" disabled>Sales Split</button>
+                <button type="button" onclick="csSplit()" id="csSplitBtn" disabled>CS Split</button>
+                <button type="button" onclick="makeReadable()" id="makeReadableBtn" disabled>Make Data GPT Readable</button>
+                <button type="button" onclick="saveToCSV()" id="saveToCSVBtn" disabled>Save to CSV</button>
+            </div>
 
-                <!-- Task Buttons -->
-                <div class="task-buttons">
-                    <button type="button" onclick="pairMessages()" id="pairMessagesBtn" disabled>Pair Messages</button>
-                    <button type="button" onclick="salesSplit()" id="salesSplitBtn" disabled>Sales Split</button>
-                    <button type="button" onclick="csSplit()" id="csSplitBtn" disabled>CS Split</button>
-                    <button type="button" onclick="makeReadable()" id="makeReadableBtn" disabled>Make Data GPT Readable</button>
-                    <button type="button" onclick="saveToCSV()" id="saveToCSVBtn" disabled>Save to CSV</button>
-                </div>
+            <div class="form-group">
+                <label for="searchTextColumn">Search Messages</label>
+                <input type="text" id="searchTextColumn" placeholder="Text Column" disabled>
+                <input type="text" id="searchText" placeholder="Search Text" disabled>
+                <button type="button" onclick="searchMessages()" id="searchMessagesBtn" disabled>Search Messages</button>
+            </div>
 
-                <!-- Search Messages -->
-                <div class="form-group">
-                    <label for="searchTextColumn">Search Messages</label>
-                    <input type="text" id="searchTextColumn" name="text_column" placeholder="Text Column" disabled>
-                    <input type="text" id="searchText" name="searched_text" placeholder="Search Text" disabled>
-                    <button type="button" onclick="searchMessages()" id="searchMessagesBtn" disabled>Search Messages</button>
-                </div>
-
-                <!-- Filter by Chat ID -->
-                <div class="form-group">
-                    <label for="filterChatId">Filter by Chat ID</label>
-                    <input type="number" id="filterChatId" name="chat_id" placeholder="Chat ID" disabled>
-                    <button type="button" onclick="filterByChatId()" id="filterByChatIdBtn" disabled>Filter</button>
-                </div>
-            </form>
+            <div class="form-group">
+                <label for="filterChatId">Filter by Chat ID</label>
+                <input type="number" id="filterChatId" placeholder="Chat ID" disabled>
+                <button type="button" onclick="filterByChatId()" id="filterByChatIdBtn" disabled>Filter</button>
+            </div>
         </div>
     </div>
 
