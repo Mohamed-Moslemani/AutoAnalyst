@@ -56,29 +56,43 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
         return None, f"Missing column: {str(ke)}"
     except Exception as e:
         return None, f"Preprocessing failed. Error: {str(e)}"
-
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     try:
         if df is None or df.empty:
-            raise ValueError("No DataFrame loaded. Please upload and preprocess the file.")
-        
+            raise ValueError("The input DataFrame is empty. Please provide a valid dataset.")
+
+        # Check for required columns
+        required_columns = {'Contact ID', 'Message Type', 'Chat ID', 'Date & Time', 'Sender ID', 'text'}
+        missing_columns = required_columns - set(df.columns)
+        if missing_columns:
+            raise KeyError(f"Missing required columns: {', '.join(missing_columns)}")
+
+        # Drop rows with NaN in critical columns
+        df = df.dropna(subset=['Message Type', 'Contact ID', 'Chat ID'])
+
         paired_rows = []
         current_contact_id = None
         incoming_messages = []
         outgoing_messages = []
         current_messages = []
         current_direction = None
+
         for _, row in df.iterrows():
             contact_id = row['Contact ID']
             message_type = row['Message Type']
+
+            # Skip rows with NaN or unexpected message types
+            if pd.isna(message_type):
+                continue
+
             if contact_id != current_contact_id:
                 if current_messages:
                     if current_direction == 'incoming':
                         incoming_messages.extend(current_messages)
                     else:
                         outgoing_messages.extend(current_messages)
-                
-                    if incoming_messages or outgoing_messages: 
+
+                    if incoming_messages or outgoing_messages:
                         paired_rows.append({
                             'Chat ID': row['Chat ID'],
                             'Contact ID': current_contact_id,
@@ -89,7 +103,7 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                             'incoming_texts': [msg['text'] for msg in incoming_messages],
                             'outgoing_texts': [msg['text'] for msg in outgoing_messages],
                         })
-                
+
                 current_contact_id = contact_id
                 incoming_messages = []
                 outgoing_messages = []
@@ -97,16 +111,16 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 current_direction = message_type
                 continue
 
-            # If the message type changes, save the accumulated messages in the correct direction
+            # If the message type changes, save the accumulated messages
             if message_type != current_direction:
                 if current_direction == 'incoming':
                     incoming_messages.extend(current_messages)
                 else:
                     outgoing_messages.extend(current_messages)
-                
+
                 current_messages = [row]
                 current_direction = message_type
-                
+
                 # Pair messages if both incoming and outgoing are available
                 if incoming_messages and outgoing_messages:
                     paired_rows.append({
@@ -125,7 +139,7 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 # Continue collecting messages of the same type
                 current_messages.append(row)
 
-        # Finalize the last contact ID messages
+        # Finalize the last batch of messages
         if current_messages:
             if current_direction == 'incoming':
                 incoming_messages.extend(current_messages)
@@ -144,28 +158,31 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
                 'outgoing_texts': [msg['text'] for msg in outgoing_messages],
             })
 
-        # Convert paired rows to a DataFrame and ensure column order
+        # Convert paired rows to a DataFrame
         if paired_rows:
             paired_df = pd.DataFrame(paired_rows)
+            # Ensure desired column order
             desired_order = [
                 'Chat ID', 'Contact ID', 'incoming_dates', 'outgoing_dates',
                 'incoming_sender_ids', 'outgoing_sender_ids',
-                'outgoing_texts', 'incoming_texts'
+                'incoming_texts', 'outgoing_texts'
             ]
-            missing_cols = set(desired_order) - set(paired_df.columns)
-            for col in missing_cols:
-                paired_df[col] = None
+            for col in desired_order:
+                if col not in paired_df.columns:
+                    paired_df[col] = None
+
             paired_df = paired_df[desired_order]
             return paired_df, "Messages paired successfully!"
         else:
             return None, "No pairs found."
-    except ValueError as ve:
-        return None, str(ve)
+
     except KeyError as ke:
         return None, f"Missing column: {str(ke)}"
+    except ValueError as ve:
+        return None, str(ve)
     except Exception as e:
         return None, f"An unexpected error occurred: {str(e)}"
-    
+
 
 def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
     def safe_eval_and_convert_to_int_list(x):
