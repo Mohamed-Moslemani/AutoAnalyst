@@ -231,7 +231,7 @@ def sales_split_task(self, s3_input_key: str) -> dict:
         del df, sales_df
         gc.collect()
 
-        return {'status': 'success', 'message': message, 'sales_split_file_s3_key': sales_split_s3_key}
+        return {'status': 'success', 'message': message, 'sales_split_file_s3_key': sales_split_s3_key,'chat_count': len(sales_df['Contact ID'].unique())}
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
@@ -265,7 +265,7 @@ def search_messages_task(self, s3_input_key: str, text_column: str, searched_tex
         del df, search_df
         gc.collect()
 
-        return {'status': 'success', 'message': message, 'search_messages_file_s3_key': search_messages_s3_key}
+        return {'status': 'success', 'message': message, 'search_messages_file_s3_key': search_messages_s3_key,'chat_count': len(search_df['Contact ID'].unique())}
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}
@@ -299,7 +299,7 @@ def filter_by_chat_id_task(self, s3_input_key: str, chat_id: str) -> dict:
         del df, filtered_df
         gc.collect()
 
-        return {'status': 'success', 'message': message, 'filter_file_s3_key': filter_s3_key}
+        return {'status': 'success', 'message': message, 'filter_file_s3_key': filter_s3_key,'chat_count': len(filtered_df['Contact ID'].unique())}
 
     except Exception as e:
         return {'status': 'failure', 'message': str(e)}

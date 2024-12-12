@@ -49,6 +49,13 @@
             color: #fff;
         }
 
+        /* Chat Counter */
+        .chat-counter {
+            font-size: 1.5em;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+
         /* Card Styles */
         .card {
             background: #16213e;
@@ -193,6 +200,9 @@
             <h1>Sales-CS Chats Analyzer</h1>
         </div>
 
+        <!-- Chat Counter -->
+        <div id="chatCounter" class="chat-counter">Chats: 0</div>
+
         <!-- File Upload Card -->
         <div class="card">
             <div class="upload-section">
@@ -201,6 +211,8 @@
                 <button onclick="uploadFile()">Upload and Preprocess</button>
             </div>
         </div>
+
+        <!-- Download Guidelines -->
         <div style="text-align: center; margin-bottom: 20px;">
             <a href="../static/Guidelines.pdf" download>
                 <button style="background-color: #ff9800;color: white; padding: 10px 20px; font-size: 1.2em; border: none; border-radius: 5px; cursor: pointer;">
@@ -216,7 +228,7 @@
         <div class="card task-section">
             <h2>Additional Operations</h2>
             <form id="additionalOpsForm">
-                <input type="hidden" id="currentFilePath" name="file_key"> <!-- Updated name -->
+                <input type="hidden" id="currentFilePath" name="file_key">
 
                 <!-- Task Buttons -->
                 <div class="task-buttons">
@@ -250,14 +262,16 @@
         &copy; 2024 - CS Chats Analyzer - 800Storage Data Team - All rights reserved.
     </div>
 
-    <!-- JavaScript -->
     <script>
-        /**
-         * Handles the completion of a task and updates the currentFilePath to the latest file.
-         * @param {string} operation - The completed operation/task name.
-         * @param {object} data - The result data from the completed task.
-         */
-        function handleTaskCompletion(operation, data) {
+            let currentChatCount = 0;
+
+            function updateChatCounter(count) {
+                currentChatCount = count;
+                document.getElementById('chatCounter').textContent = `Chats: ${count}`;
+            }
+
+
+         function handleTaskCompletion(operation, data) {
             let newS3Key;
             let downloadLabel;
 
@@ -278,22 +292,6 @@
                     newS3Key = data.cs_split_file_s3_key;
                     downloadLabel = "CS Split File (CSV)";
                     break;
-                case "make_readable_task":
-                    newS3Key = data.readable_file_s3_key;
-                    downloadLabel = "Readable File (TXT)";
-                    break;
-                case "save_to_csv_task":
-                    newS3Key = data.csv_file_s3_key;
-                    downloadLabel = "Final CSV File";
-                    break;
-                case "search_messages_task":
-                    newS3Key = data.search_messages_file_s3_key;
-                    downloadLabel = "Search Messages Result (CSV)";
-                    break;
-                case "filter_by_chat_id_task":
-                    newS3Key = data.filter_file_s3_key;
-                    downloadLabel = `Filtered Chat ID ${document.getElementById('filterChatId').value} (CSV)`;
-                    break;
                 default:
                     console.error(`No handler for operation: ${operation}`);
                     return;
@@ -304,14 +302,13 @@
                 document.getElementById('currentFilePath').value = newS3Key;
                 const statusDiv = document.getElementById('status');
                 statusDiv.innerHTML += ` <br><a href="/download/${filename}" target="_blank">Download ${downloadLabel}</a>`;
-
-                // Optionally, you can clear the file input after processing
-                if (operation === "preprocess_task") {
-                    document.getElementById('fileInput').value = "";
-                }
             }
 
-            // Re-enable all buttons after task completion
+            // Update chat counter if data includes chat count
+            if (data.chat_count !== undefined) {
+                updateChatCounter(data.chat_count);
+            }
+
             enableActionButtons();
         }
 

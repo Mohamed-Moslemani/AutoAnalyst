@@ -308,3 +308,9 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
         file.write(result)
 
     return result, f"Data saved to {save_file_name}"
+
+def count_chats(df: pd.DataFrame) -> int:
+    """Counts unique chats based on Contact ID."""
+    if 'Contact ID' not in df.columns:
+        return 0
+    return df['Contact ID'].nunique()
