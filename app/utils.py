@@ -218,42 +218,56 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
 def _parse_dates(lst):
     return [pd.to_datetime(x, errors="coerce") for x in lst]
 
+# utils.py  ── replace ONLY make_readable ------------------------------
+import pandas as pd
+import ast
+from typing import Tuple, Optional, List
+
+def _as_list(x):
+    """Turn a stringified list into a real list, tolerate NaNs."""
+    if isinstance(x, list):
+        return x
+    if pd.isna(x):
+        return []
+    try:
+        out = ast.literal_eval(x)
+        return out if isinstance(out, list) else []
+    except Exception:
+        return []
 
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
     """
-    Take the dataframe returned by `pair_messages` and build a plain‑text
-    transcript ordered chronologically, alternating Client / Agent lines.
+    Build a transcript from the *paired* dataframe so that every
+    Client message is followed immediately by the matching Agent reply
+    (if there is one), preserving the turn order inside each Chat ID.
+    Place‑holders like 'template', 'image', etc. are kept.
     """
-    required = {
+    needed = {
         "Chat ID",
-        "incoming_texts", "outgoing_texts",
-        "incoming_dates", "outgoing_dates",
+        "incoming_texts", "outgoing_texts"
     }
-    if not required.issubset(df.columns):
-        return None, f"Expected paired dataframe with columns {required}"
+    if not needed.issubset(df.columns):
+        return None, f"Expected paired dataframe with columns {needed}"
 
     lines: List[str] = []
 
     for chat_id, grp in df.groupby("Chat ID"):
-        timeline: List[Tuple[pd.Timestamp, str, str]] = []
-
-        for _, row in grp.iterrows():
-            in_texts = _safe_eval_list(row["incoming_texts"])
-            out_texts = _safe_eval_list(row["outgoing_texts"])
-            in_dates = _parse_dates(_safe_eval_list(row["incoming_dates"]))
-            out_dates = _parse_dates(_safe_eval_list(row["outgoing_dates"]))
-
-            timeline += list(zip(in_dates, ["Client"] * len(in_texts), in_texts))
-            timeline += list(zip(out_dates, ["Agent"] * len(out_texts), out_texts))
-
-        # sort; NaT (failed date parse) pushed to bottom
-        timeline.sort(key=lambda x: (pd.isna(x[0]), x[0]))
-
         lines.append(f"Chat ID: {chat_id}")
-        for _, speaker, msg in timeline:
-            lines.append(f"{speaker}: {msg}")
+
+        # the paired rows are already sequential turns
+        for _, row in grp.iterrows():
+            ins  = _as_list(row["incoming_texts"])
+            outs = _as_list(row["outgoing_texts"])
+
+            # interleave  -----------------------------------------------------
+            for i in range(max(len(ins), len(outs))):
+                if i < len(ins):
+                    lines.append(f"Client: {ins[i]}")
+                if i < len(outs):
+                    lines.append(f"Agent: {outs[i]}")
+
         lines.append("-" * 70)
-        lines.append("")
+        lines.append("")                 # blank line
 
     transcript = "\n".join(lines)
-    return transcript, "Transcript built successfully."
+    return transcript, "Transcript built successfully (interleaved)."
