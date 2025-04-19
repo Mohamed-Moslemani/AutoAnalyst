@@ -238,56 +238,30 @@ def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd
     chat_id_input = chat_id_input.strip()
     filtered_df = df[df[expected_chat_id_column] == chat_id_input]
     return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
-
-import ast
+# utils.py
 import pandas as pd
 from typing import Tuple, Optional
 
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
-    if df is None or df.empty:
-        return None, "No DataFrame loaded. Please upload and preprocess the file."
+    # ---------- sanity checks ----------
+    required_cols = {'Chat ID', 'Message Type', 'text', 'Date & Time'}
+    if not required_cols.issubset(df.columns):
+        return None, f"DataFrame must contain {required_cols}", False
+    if df.empty:
+        return None, "DataFrame is empty – nothing to stringify.", False
 
-    result = ""
+    # ---------- prep ----------
+    df['Date & Time'] = pd.to_datetime(df['Date & Time'])
+    df = df.sort_values(['Chat ID', 'Date & Time'])
 
-    # Group the dataframe by 'Contact ID' and 'Chat ID'
-    grouped = df.groupby(['Contact ID', 'Chat ID'])
+    lines = []
+    for chat_id, grp in df.groupby('Chat ID'):
+        lines.append(f"Chat ID: {chat_id}")
+        for _, row in grp.iterrows():
+            speaker = 'Agent' if row['Message Type'] == 'outgoing' else 'Client'
+            lines.append(f"{speaker}: {row['text']}")
+        lines.append('-' * 70)          # section separator
+        lines.append('')                # blank line
 
-    for (contact_id, chat_id), group in grouped:
-        result += f"Contact ID: {contact_id}\n\n"
-        result += f"Chat ID: {chat_id}\n"
-
-        incoming_texts = []
-        outgoing_texts = []
-
-        for _, row in group.iterrows():
-            row_incoming_texts = row.get('incoming_texts', '[]')
-            row_outgoing_texts = row.get('outgoing_texts', '[]')
-
-            # Convert string representations of lists to actual lists if necessary
-            if isinstance(row_incoming_texts, str):
-                try:
-                    row_incoming_texts = ast.literal_eval(row_incoming_texts)
-                except (ValueError, SyntaxError):
-                    row_incoming_texts = []  # Fallback if conversion fails
-            if isinstance(row_outgoing_texts, str):
-                try:
-                    row_outgoing_texts = ast.literal_eval(row_outgoing_texts)
-                except (ValueError, SyntaxError):
-                    row_outgoing_texts = []  # Fallback if conversion fails
-
-            incoming_texts.extend(row_incoming_texts)
-            outgoing_texts.extend(row_outgoing_texts)
-
-        # Append incoming and outgoing messages in the "Client" and "Agent" format
-        for msg in incoming_texts:
-            result += f"Client: {msg}\n"
-        for msg in outgoing_texts:
-            result += f"Agent: {msg}\n"
-        result += "\n" + "-" * 70 + "\n"
-
-    # Save the result to a file and return the content
-    save_file_name = "chat_transcript.txt"
-    with open(save_file_name, 'w', encoding='utf-8') as file:
-        file.write(result)
-
-    return result, f"Data saved to {save_file_name}"
+    transcript = '\n'.join(lines)
+    return transcript, "Chat transcript built successfully!"
