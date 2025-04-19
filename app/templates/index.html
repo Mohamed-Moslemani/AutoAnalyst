@@ -228,6 +228,8 @@
     <div class="footer">
         &copy; 2024 - CS Chats Analyzer - 800Storage Data Team - All rights reserved.
     </div>
+    <input type="hidden" id="currentFilePath" value="">
+
 
     <!-- JavaScript -->
     <script>
@@ -280,7 +282,10 @@
 
             if (newS3Key) {
                 const filename = newS3Key.split('/').pop();
-                document.getElementById('currentFilePath').value = newS3Key;
+                const pathInput = document.getElementById('currentFilePath');
+                if (pathInput) {
+                    pathInput.value = newS3Key;
+                }
                 const statusDiv = document.getElementById('status');
                 statusDiv.innerHTML += ` <br><a href="/download/${filename}" target="_blank">Download ${downloadLabel}</a>`;
 
