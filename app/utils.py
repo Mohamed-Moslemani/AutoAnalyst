@@ -77,66 +77,68 @@ def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]
     except Exception as e:
         return None, f"Preprocessing failed – {e}"
 
-
-# ----------------------------------------------------------------------
-# 3) PAIR MESSAGES  (for later GPT‑readable transcript)
-# ----------------------------------------------------------------------
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     """
-    Build one row per conversation turn (all consecutive incoming msgs
-    followed by all consecutive outgoing msgs) *per Chat ID*.
-    Lists are kept in chronological order.
+    Collect consecutive incoming / outgoing runs per Chat‑ID while preserving
+    exact timestamp order.  Output columns are identical to the old version
+    so downstream tasks keep working.
     """
     try:
         if df is None or df.empty:
             raise ValueError("No DataFrame loaded.")
 
-        required = {"Chat ID", "Message Type", "Date & Time", "Sender ID", "text"}
-        if not required.issubset(df.columns):
-            raise ValueError(f"Missing columns: {required - set(df.columns)}")
+        required = {
+            "Chat ID", "Contact ID", "Message Type",
+            "Date & Time", "Sender ID", "text"
+        }
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing columns: {missing}")
 
-        paired_rows: List[Dict] = []
+        df = df.sort_values(["Chat ID", "Date & Time"])
 
-        for chat_id, grp in df.groupby("Chat ID"):
-            grp = grp.sort_values("Date & Time")
-            buffer: List[Dict] = []
-            buffer_dir: Optional[str] = None  # 'incoming' / 'outgoing'
-
-            def flush():
-                nonlocal buffer, buffer_dir
-                if not buffer:
-                    return
-                paired_rows.append(
-                    {
-                        "Chat ID": chat_id,
-                        "incoming_dates": [r["Date & Time"] for r in buffer if r["Message Type"] == "incoming"],
-                        "outgoing_dates": [r["Date & Time"] for r in buffer if r["Message Type"] == "outgoing"],
-                        "incoming_sender_ids": [r["Sender ID"] for r in buffer if r["Message Type"] == "incoming"],
-                        "outgoing_sender_ids": [r["Sender ID"] for r in buffer if r["Message Type"] == "outgoing"],
-                        "incoming_texts": [r["text"] for r in buffer if r["Message Type"] == "incoming"],
-                        "outgoing_texts": [r["text"] for r in buffer if r["Message Type"] == "outgoing"],
-                    }
-                )
-                buffer, buffer_dir = [], None
-
-            for _, row in grp.iterrows():
-                direction = row["Message Type"]
-                if buffer_dir is None or direction == buffer_dir:
-                    buffer.append(row)
-                    buffer_dir = direction
+        rows = []
+        for chat_id, chat in df.groupby("Chat ID"):
+            cur_dir = None
+            buf_in, buf_out = [], []
+            for _, row in chat.iterrows():
+                if row["Message Type"] == cur_dir or cur_dir is None:
+                    # keep filling the current run
+                    if row["Message Type"] == "incoming":
+                        buf_in.append(row)
+                    else:
+                        buf_out.append(row)
+                    cur_dir = row["Message Type"]
                 else:
-                    flush()
-                    buffer.append(row)
-                    buffer_dir = direction
+                    # direction changed → flush a paired row
+                    rows.append({
+                        "Chat ID": chat_id,
+                        "Contact ID": row["Contact ID"],
+                        "incoming_dates": [r["Date & Time"] for r in buf_in],
+                        "outgoing_dates": [r["Date & Time"] for r in buf_out],
+                        "incoming_sender_ids": [r["Sender ID"] for r in buf_in],
+                        "outgoing_sender_ids": [r["Sender ID"] for r in buf_out],
+                        "incoming_texts": [r["text"] for r in buf_in],
+                        "outgoing_texts": [r["text"] for r in buf_out],
+                    })
+                    # reset buffers with the first row of new run
+                    buf_in, buf_out = ([], [row]) if row["Message Type"] == "outgoing" else ([row], [])
+                    cur_dir = row["Message Type"]
 
-            flush()  # last turn in chat
+            # flush whatever is left at end of chat
+            rows.append({
+                "Chat ID": chat_id,
+                "Contact ID": chat.iloc[-1]["Contact ID"],
+                "incoming_dates": [r["Date & Time"] for r in buf_in],
+                "outgoing_dates": [r["Date & Time"] for r in buf_out],
+                "incoming_sender_ids": [r["Sender ID"] for r in buf_in],
+                "outgoing_sender_ids": [r["Sender ID"] for r in buf_out],
+                "incoming_texts": [r["text"] for r in buf_in],
+                "outgoing_texts": [r["text"] for r in buf_out],
+            })
 
-        if not paired_rows:
-            return None, "No pairs found."
-
-        paired_df = pd.DataFrame(paired_rows)
+        paired_df = pd.DataFrame(rows)
         return paired_df, "Messages paired successfully!"
-
     except Exception as e:
         return None, f"Pairing failed – {e}"
 
@@ -271,3 +273,61 @@ def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
 
     transcript = "\n".join(lines)
     return transcript, "Transcript built successfully (interleaved)."
+def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
+    """
+    Build a transcript from the *paired* dataframe, emitting the next message
+    in chronological order – client or agent – so the flow is:
+        Client msg 1
+        Agent  reply 1
+        Client msg 2
+        Agent  reply 2
+        ...
+    """
+    import ast, pandas as pd
+    from typing import List, Tuple
+
+    must_have = {
+        "Chat ID",
+        "incoming_texts", "outgoing_texts",
+        "incoming_dates", "outgoing_dates",
+    }
+    if not must_have.issubset(df.columns):
+        return None, f"Expected paired dataframe with columns {must_have}"
+
+    def _l(x):  # safe list loader
+        if isinstance(x, list):
+            return x
+        if pd.isna(x):
+            return []
+        try:
+            out = ast.literal_eval(x)
+            return out if isinstance(out, list) else []
+        except Exception:
+            return []
+
+    def _d(dlst):
+        return [pd.to_datetime(v, errors="coerce") for v in dlst]
+
+    lines: List[str] = []
+
+    for chat_id, grp in df.groupby("Chat ID"):
+        # flatten the chat into (time, speaker, text)
+        timeline: List[Tuple[pd.Timestamp, str, str]] = []
+        for _, row in grp.iterrows():
+            in_txt, out_txt = _l(row["incoming_texts"]), _l(row["outgoing_texts"])
+            in_dt,  out_dt  = _d(_l(row["incoming_dates"])), _d(_l(row["outgoing_dates"]))
+            timeline.extend(zip(in_dt,  ["Client"]*len(in_txt), in_txt))
+            timeline.extend(zip(out_dt, ["Agent"]*len(out_txt),  out_txt))
+
+        # order by timestamp; NaTs go last but keep insertion order there
+        timeline.sort(key=lambda x: (pd.isna(x[0]), x[0]))
+
+        # emit
+        lines.append(f"Chat ID: {chat_id}")
+        for _, speaker, text in timeline:
+            lines.append(f"{speaker}: {text}")
+        lines.append("-"*70)
+        lines.append("")
+
+    transcript = "\n".join(lines)
+    return transcript, "Transcript built successfully."
