@@ -1,204 +1,293 @@
-# ===============================================
-#  utils.py  (drop‑in replacement)
-# ===============================================
-import ast, json
-from typing import Tuple, Optional, List, Dict
 import pandas as pd
-import numpy as np
+import json
+from typing import Tuple, Optional, List, Dict
+import ast 
+import math 
+import numpy as np 
 
-
-# ------------------------------------------------------------------
-# CONSTANTS
-# ------------------------------------------------------------------
-CS_AGENT_IDS = {
-    124760, 396575, 354259, 352740, 178283,
-    398639, 467165, 277476, 464154, 1023356,
-}
-
-
-# ------------------------------------------------------------------
-# 1)  TEXT NORMALISATION
-# ------------------------------------------------------------------
-def extract_text(content: str) -> str:
-    """
-    Convert the JSON blob in “Content” to plain text.
-    Keeps 'template', 'image', etc. so you can filter later if desired.
-    """
+def extract_text(content: str, content_type: str) -> str:
     try:
-        obj = json.loads(content)
-        typ = obj.get("type", "").lower()
+        # Parse content safely
+        content_data = ast.literal_eval(content) if isinstance(content, str) else {}
 
-        if typ == "text":
-            return obj.get("text", "")
-
-        if typ == "attachment":
-            return obj.get("attachment", {}).get("type", "")
-
-        if typ == "whatsapp_template":
-            comps = obj.get("template", {}).get("components", [])
-            texts = [c.get("text", "") for c in comps if "text" in c]
-            return " ".join(texts) or "template"
-
-        return "template"
-    except (json.JSONDecodeError, TypeError):
-        return "template"
+        if content_type == 'text':
+            return content_data.get("text", "text (empty)")
+        elif content_type == 'attachment':
+            attachment_type = content_data.get("attachment", {}).get("type", "unknown")
+            return f"attachment ({attachment_type})"
+        elif content_type == 'whatsapp_template':
+            category = content_data.get("template", {}).get("category", "unknown")
+            return f"template ({category})"
+        else:
+            return f"other ({content_type})"
+    except Exception:
+        return "unreadable"
 
 
-# ------------------------------------------------------------------
-# 2)  PRE‑PROCESS
-# ------------------------------------------------------------------
 def preprocess_dataframe(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
-    """
-    * parse dates
-    * sort inside Contact ID
-    * drop internal contact 21794581
-    * add 'text' and incremental 'Chat ID'
-    """
     try:
         if df is None or df.empty:
-            raise ValueError("No data.")
-
-        df["Date & Time"] = pd.to_datetime(df["Date & Time"], errors="coerce")
-        df = df.sort_values(["Contact ID", "Date & Time"]).reset_index(drop=True)
-        df = df[df["Contact ID"] != 21794581]
-
-        df["text"]    = df["Content"].apply(extract_text)
-        df["Chat ID"] = (df["Contact ID"] != df["Contact ID"].shift()).cumsum()
-
-        # NA hygiene the app relied on
-        df["text"].fillna("template", inplace=True)
-        df["Type"].fillna("normal_text", inplace=True)
-        df["Sub Type"].fillna("normal_text", inplace=True)
-        df["Sender ID"].fillna(0, inplace=True)
-
-        # nicer column order
+            raise ValueError("No DataFrame loaded. Please upload a file.")
+        df['Date & Time'] = pd.to_datetime(df['Date & Time'])
+        df = df.sort_values(by=['Contact ID', 'Date & Time']).reset_index(drop=True)
+        df = df[df['Contact ID'] != 21794581]
+        df['text'] = df['Content'].apply(extract_text)
+        df['Chat ID'] = (df['Contact ID'] != df['Contact ID'].shift()).cumsum()
+        
         cols = df.columns.tolist()
-        cols.insert(0, cols.pop(cols.index("Chat ID")))
-        cols.insert(cols.index("Content") + 1, cols.pop(cols.index("text")))
+        if 'Chat ID' in cols:
+            cols.remove('Chat ID')
+            cols.insert(0, 'Chat ID')
+        if 'text' in cols:
+            cols.remove('text')
+            content_idx = cols.index('Content') + 1 if 'Content' in cols else len(cols)
+            cols.insert(content_idx, 'text')
         df = df[cols]
-
-        return df, "Pre‑processing complete."
+        df['text'] = df['text'].fillna('template')
+        df['Type'] = df['Type'].fillna('normal_text')
+        df['Sub Type'] = df['Sub Type'].fillna('normal_text')
+        df['Sender ID'] = df['Sender ID'].fillna(0)
+        if 0 in df.index:
+            df = df.drop(index=0).reset_index(drop=True)
+        return df, "DataFrame preprocessed successfully!"
+    except ValueError as ve:
+        return None, str(ve)
+    except KeyError as ke:
+        return None, f"Missing column: {str(ke)}"
     except Exception as e:
-        return None, f"Pre‑processing failed – {e}"
+        return None, f"Preprocessing failed. Error: {str(e)}"
 
-
-# ------------------------------------------------------------------
-# 3)  PAIR  (keeps timestamp order inside each turn)
-# ------------------------------------------------------------------
 def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
     try:
         if df is None or df.empty:
-            raise ValueError("No data.")
+            raise ValueError("No DataFrame loaded. Please upload and preprocess the file.")
+        
+        paired_rows = []
+        current_contact_id = None
+        incoming_messages = []
+        outgoing_messages = []
+        current_messages = []
+        current_direction = None
+        for _, row in df.iterrows():
+            contact_id = row['Contact ID']
+            message_type = row['Message Type']
+            if contact_id != current_contact_id:
+                if current_messages:
+                    if current_direction == 'incoming':
+                        incoming_messages.extend(current_messages)
+                    else:
+                        outgoing_messages.extend(current_messages)
+                
+                    if incoming_messages or outgoing_messages: 
+                        paired_rows.append({
+                            'Chat ID': row['Chat ID'],
+                            'Contact ID': current_contact_id,
+                            'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
+                            'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
+                            'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
+                            'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
+                            'incoming_texts': [msg['text'] for msg in incoming_messages],
+                            'outgoing_texts': [msg['text'] for msg in outgoing_messages],
+                        })
+                
+                current_contact_id = contact_id
+                incoming_messages = []
+                outgoing_messages = []
+                current_messages = [row]
+                current_direction = message_type
+                continue
 
-        df = df.sort_values(["Chat ID", "Date & Time"])
-
-        rows: List[Dict] = []
-        for chat_id, chat in df.groupby("Chat ID"):
-            cur_dir = None
-            buf_in, buf_out = [], []
-
-            def flush():
-                if not buf_in and not buf_out:
-                    return
-                rows.append({
-                    "Chat ID": chat_id,
-                    "incoming_dates":  [r["Date & Time"] for r in buf_in],
-                    "outgoing_dates":  [r["Date & Time"] for r in buf_out],
-                    "incoming_sender_ids": [r["Sender ID"] for r in buf_in],
-                    "outgoing_sender_ids": [r["Sender ID"] for r in buf_out],
-                    "incoming_texts":  [r["text"] for r in buf_in],
-                    "outgoing_texts":  [r["text"] for r in buf_out],
-                })
-
-            for _, row in chat.iterrows():
-                direction = row["Message Type"]  # 'incoming' / 'outgoing'
-                if cur_dir is None or direction == cur_dir:
-                    (buf_in if direction == "incoming" else buf_out).append(row)
-                    cur_dir = direction
+            # If the message type changes, save the accumulated messages in the correct direction
+            if message_type != current_direction:
+                if current_direction == 'incoming':
+                    incoming_messages.extend(current_messages)
                 else:
-                    flush()
-                    buf_in, buf_out = ([], [row]) if direction == "outgoing" else ([row], [])
-                    cur_dir = direction
-            flush()
+                    outgoing_messages.extend(current_messages)
+                
+                current_messages = [row]
+                current_direction = message_type
+                
+                # Pair messages if both incoming and outgoing are available
+                if incoming_messages and outgoing_messages:
+                    paired_rows.append({
+                        'Chat ID': row['Chat ID'],
+                        'Contact ID': contact_id,
+                        'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
+                        'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
+                        'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
+                        'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
+                        'incoming_texts': [msg['text'] for msg in incoming_messages],
+                        'outgoing_texts': [msg['text'] for msg in outgoing_messages],
+                    })
+                    incoming_messages = []
+                    outgoing_messages = []
+            else:
+                # Continue collecting messages of the same type
+                current_messages.append(row)
 
-        out_df = pd.DataFrame(rows)
-        return out_df, "Pairing complete."
+        # Finalize the last contact ID messages
+        if current_messages:
+            if current_direction == 'incoming':
+                incoming_messages.extend(current_messages)
+            else:
+                outgoing_messages.extend(current_messages)
+
+        if incoming_messages or outgoing_messages:
+            paired_rows.append({
+                'Chat ID': row['Chat ID'],
+                'Contact ID': current_contact_id,
+                'incoming_dates': [msg['Date & Time'] for msg in incoming_messages],
+                'outgoing_dates': [msg['Date & Time'] for msg in outgoing_messages],
+                'incoming_sender_ids': [msg['Sender ID'] for msg in incoming_messages],
+                'outgoing_sender_ids': [msg['Sender ID'] for msg in outgoing_messages],
+                'incoming_texts': [msg['text'] for msg in incoming_messages],
+                'outgoing_texts': [msg['text'] for msg in outgoing_messages],
+            })
+
+        # Convert paired rows to a DataFrame and ensure column order
+        if paired_rows:
+            paired_df = pd.DataFrame(paired_rows)
+            desired_order = [
+                'Chat ID', 'Contact ID', 'incoming_dates', 'outgoing_dates',
+                'incoming_sender_ids', 'outgoing_sender_ids',
+                'outgoing_texts', 'incoming_texts'
+            ]
+            missing_cols = set(desired_order) - set(paired_df.columns)
+            for col in missing_cols:
+                paired_df[col] = None
+            paired_df = paired_df[desired_order]
+            return paired_df, "Messages paired successfully!"
+        else:
+            return None, "No pairs found."
+    except ValueError as ve:
+        return None, str(ve)
+    except KeyError as ke:
+        return None, f"Missing column: {str(ke)}"
     except Exception as e:
-        return None, f"Pairing failed – {e}"
+        return None, f"An unexpected error occurred: {str(e)}"
+    
+
+def parse_column_list(df: pd.DataFrame, column_name: str) -> pd.Series:
+    def safe_eval_and_convert_to_int_list(x):
+        try:
+            parsed = ast.literal_eval(x) if isinstance(x, str) else x
+            # Check if parsed data is a list and convert to int list
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return [int(elem) if not np.isnan(elem) else np.nan for elem in parsed]
+            return []
+        except (ValueError, SyntaxError):
+            return []  # Return an empty list if parsing fails
+        
+    # Apply parsing and converting function to ensure consistent list format
+    df[column_name] = df[column_name].apply(safe_eval_and_convert_to_int_list)
 
 
-# ------------------------------------------------------------------
-# 4)  SALES‑ONLY FILTER  (works on paired dataframe)
-# ------------------------------------------------------------------
+def rows_with_all_elements_not_in_list(value):
+    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+    if isinstance(value, list):
+        return all(elem not in allowed_ids for elem in value)
+    return False
+
+
+def rows_with_all_elements_in_list(value):
+    allowed_ids = [124760, 396575, 354259, 352740, 178283, 398639, 467165, 277476, 464154, 1023356]
+    if isinstance(value, list):
+        return all(elem in allowed_ids for elem in value)
+    return False
+
+
+def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    try:
+        if 'outgoing_sender_ids' not in df.columns:
+            return None, "Missing required column: 'outgoing_sender_ids'", False
+        
+        parse_column_list(df, 'outgoing_sender_ids')
+        cs_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_in_list)]
+        return (cs_df, "CS chats filtered successfully!", True) if not cs_df.empty else (None, "No CS chats found.", False)
+    
+    except Exception as e:
+        return None, str(e), False
+    
+
 def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
-    if "outgoing_sender_ids" not in df.columns:
-        return None, "Missing 'outgoing_sender_ids'.", False
+    try:
+        if 'outgoing_sender_ids' not in df.columns:
+            return None, "Missing required column: 'outgoing_sender_ids'", False
+        
+        parse_column_list(df, 'outgoing_sender_ids')        
+        sales_df = df[df['outgoing_sender_ids'].apply(rows_with_all_elements_not_in_list)]
+        return (sales_df, "Sales chats filtered successfully!", True) if not sales_df.empty else (None, "No Sales chats found.", False)
+    
+    except Exception as e:
+        return None, str(e), False
 
-    # normalise to real lists
-    def to_list(x):
-        if isinstance(x, list):
-            return x
-        if pd.isna(x):
-            return []
-        try:
-            val = ast.literal_eval(x)
-            return val if isinstance(val, list) else []
-        except Exception:
-            return []
+def search_messages(df: pd.DataFrame, text_column: str, searched_text: str) -> Tuple[Optional[pd.DataFrame], str]:
+    try:
+        if text_column not in df.columns:
+            return None, f"Column '{text_column}' not found in DataFrame."
+        search_df = df[df[text_column].str.contains(searched_text, case=False, na=False)]
+        return (search_df, "Messages containing the searched text found successfully!") if not search_df.empty else (None, "No messages found containing the searched text.")
+    except Exception as e:
+        return None, str(e)
 
-    df["outgoing_sender_ids"] = df["outgoing_sender_ids"].apply(to_list)
+def filter_by_chat_id(df: pd.DataFrame, chat_id_input: str) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    expected_chat_id_column = 'Chat ID'
+    if expected_chat_id_column not in df.columns:
+        return None, f"The DataFrame does not contain a '{expected_chat_id_column}' column.", False
+    df[expected_chat_id_column] = df[expected_chat_id_column].astype(str).str.strip()
+    chat_id_input = chat_id_input.strip()
+    filtered_df = df[df[expected_chat_id_column] == chat_id_input]
+    return (filtered_df, f"Successfully filtered {len(filtered_df)} chats with Chat ID {chat_id_input}.", True) if not filtered_df.empty else (None, "No chats found with the specified Chat ID.", False)
 
-    is_sales = df["outgoing_sender_ids"].apply(
-        lambda lst: all(s not in CS_AGENT_IDS for s in lst) or not lst
-    )
-    sales_df = df[is_sales].reset_index(drop=True)
+import ast
+import pandas as pd
+from typing import Tuple, Optional
 
-    return (sales_df, "Sales chats isolated.", True) if not sales_df.empty else (None, "No sales chats found.", False)
-
-
-# ------------------------------------------------------------------
-# 5)  GPT‑READABLE TRANSCRIPT (strict chrono order)
-# ------------------------------------------------------------------
 def make_readable(df: pd.DataFrame) -> Tuple[Optional[str], str]:
-    """
-    Build a txt transcript from the *Sales‑only paired* dataframe.
-    True chronological order, speaker labels preserved.
-    """
-    need = {
-        "Chat ID",
-        "incoming_texts", "outgoing_texts",
-        "incoming_dates", "outgoing_dates"
-    }
-    if not need.issubset(df.columns):
-        return None, f"Expect columns {need}"
+    if df is None or df.empty:
+        return None, "No DataFrame loaded. Please upload and preprocess the file."
 
-    def l(x):
-        if isinstance(x, list):
-            return x
-        if pd.isna(x):
-            return []
-        try:
-            y = ast.literal_eval(x)
-            return y if isinstance(y, list) else []
-        except Exception:
-            return []
+    result = ""
 
-    def d(lst):
-        return [pd.to_datetime(v, errors="coerce") for v in lst]
+    # Group the dataframe by 'Contact ID' and 'Chat ID'
+    grouped = df.groupby(['Contact ID', 'Chat ID'])
 
-    chunks = []
-    for chat_id, grp in df.groupby("Chat ID"):
-        timeline: List[Tuple[pd.Timestamp, str, str]] = []
-        for _, row in grp.iterrows():
-            timeline += list(zip(d(l(row["incoming_dates"])), ["Client"] * len(l(row["incoming_texts"])), l(row["incoming_texts"])))
-            timeline += list(zip(d(l(row["outgoing_dates"])), ["Agent"]  * len(l(row["outgoing_texts"])),  l(row["outgoing_texts"])))
-        timeline.sort(key=lambda t: (pd.isna(t[0]), t[0]))
+    for (contact_id, chat_id), group in grouped:
+        result += f"Contact ID: {contact_id}\n\n"
+        result += f"Chat ID: {chat_id}\n"
 
-        chunks.append(f"Chat ID: {chat_id}")
-        for _, speaker, msg in timeline:
-            chunks.append(f"{speaker}: {msg}")
-        chunks.append("-" * 70)
-        chunks.append("")
+        incoming_texts = []
+        outgoing_texts = []
 
-    txt = "\n".join(chunks)
-    return txt, "Transcript ready."
+        for _, row in group.iterrows():
+            row_incoming_texts = row.get('incoming_texts', '[]')
+            row_outgoing_texts = row.get('outgoing_texts', '[]')
+
+            # Convert string representations of lists to actual lists if necessary
+            if isinstance(row_incoming_texts, str):
+                try:
+                    row_incoming_texts = ast.literal_eval(row_incoming_texts)
+                except (ValueError, SyntaxError):
+                    row_incoming_texts = []  # Fallback if conversion fails
+            if isinstance(row_outgoing_texts, str):
+                try:
+                    row_outgoing_texts = ast.literal_eval(row_outgoing_texts)
+                except (ValueError, SyntaxError):
+                    row_outgoing_texts = []  # Fallback if conversion fails
+
+            incoming_texts.extend(row_incoming_texts)
+            outgoing_texts.extend(row_outgoing_texts)
+
+        # Append incoming and outgoing messages in the "Client" and "Agent" format
+        for msg in incoming_texts:
+            result += f"Client: {msg}\n"
+        for msg in outgoing_texts:
+            result += f"Agent: {msg}\n"
+        result += "\n" + "-" * 70 + "\n"
+
+    # Save the result to a file and return the content
+    save_file_name = "chat_transcript.txt"
+    with open(save_file_name, 'w', encoding='utf-8') as file:
+        file.write(result)
+
+    return result, f"Data saved to {save_file_name}"
