@@ -186,8 +186,6 @@ import ast
 import pandas as pd
 from typing import List, Optional, Tuple
 
-# ← YOUR master sales roster
-SALES_AGENT_IDS = {810056, 810057, 810062, 810064}      # example
 
 def _as_int_list(x) -> List[int]:
     """
