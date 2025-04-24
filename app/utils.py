@@ -182,28 +182,63 @@ def pair_messages(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str]:
 
 def _all(lst: List[int], test) -> bool:
     return bool(lst) and all(test(x) for x in lst)
+import ast
+import pandas as pd
+from typing import List, Optional, Tuple
+
+# ← YOUR master sales roster
+SALES_AGENT_IDS = {810056, 810057, 810062, 810064}      # example
+
+def _as_int_list(x) -> List[int]:
+    """
+    Bullet-proof normaliser:
+    - '[810062]'  -> [810062]
+    - '[810056, 810062]' -> [810056, 810062]
+    - 810056      -> [810056]
+    - nan / ''    -> []
+    """
+    if pd.isna(x):
+        return []
+    if isinstance(x, list):
+        return [int(v) for v in x if pd.notna(v)]
+    if isinstance(x, (int, float)):
+        return [int(x)]
+    if isinstance(x, str):
+        x = x.strip()
+        if not x:
+            return []
+        try:
+            val = ast.literal_eval(x)
+        except (SyntaxError, ValueError):
+            # fall back to comma-split
+            val = x.split(",")
+
+        if isinstance(val, list):
+            return [int(v) for v in val if str(v).strip()]
+        return [int(val)]
+    # everything else: junk
+    return []
 
 
 def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
+    """
+    Keep only rows whose *entire* outgoing_sender_ids list is non-empty
+    and every ID belongs to SALES_AGENT_IDS.
+    """
     if "outgoing_sender_ids" not in df.columns:
         return None, "Column 'outgoing_sender_ids' missing.", False
 
     df = df.copy()
-
-    # 1. Normalise every cell into a *real* list[int]
     df["outgoing_sender_ids"] = df["outgoing_sender_ids"].apply(_as_int_list)
 
-    # 2. Keep rows that have at least one ID AND every ID is in SALES_AGENT_IDS
     mask = df["outgoing_sender_ids"].apply(
         lambda ids: bool(ids) and all(i in SALES_AGENT_IDS for i in ids)
     )
 
     sub = df[mask]
-    return (
-        sub,
-        f"{len(sub)} sales chats filtered successfully!" if not sub.empty else "No Sales chats found.",
-        not sub.empty,
-    )
+    ok = not sub.empty
+    msg = f"{len(sub)} sales chats filtered successfully." if ok else "No Sales chats found."
+    return (sub, msg, ok)
 
 
 def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
