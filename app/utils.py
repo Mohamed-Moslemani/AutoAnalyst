@@ -187,11 +187,23 @@ def _all(lst: List[int], test) -> bool:
 def sales_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
     if "outgoing_sender_ids" not in df.columns:
         return None, "Column 'outgoing_sender_ids' missing.", False
+
     df = df.copy()
+
+    # 1. Normalise every cell into a *real* list[int]
     df["outgoing_sender_ids"] = df["outgoing_sender_ids"].apply(_as_int_list)
-    mask = df["outgoing_sender_ids"].apply(lambda ids: _all(ids, lambda i: i in SALES_AGENT_IDS))
+
+    # 2. Keep rows that have at least one ID AND every ID is in SALES_AGENT_IDS
+    mask = df["outgoing_sender_ids"].apply(
+        lambda ids: bool(ids) and all(i in SALES_AGENT_IDS for i in ids)
+    )
+
     sub = df[mask]
-    return (sub, "Sales chats filtered successfully!", True) if not sub.empty else (None, "No Sales chats found.", False)
+    return (
+        sub,
+        f"{len(sub)} sales chats filtered successfully!" if not sub.empty else "No Sales chats found.",
+        not sub.empty,
+    )
 
 
 def cs_split(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], str, bool]:
